@@ -5,6 +5,7 @@ import 'pages/food_page.dart';
 import 'pages/footprint_page.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/splash_page.dart';
 import 'services/notification_service.dart';
 import 'theme.dart';
 
@@ -17,7 +18,10 @@ void main() async {
 }
 
 class GiftingApp extends StatelessWidget {
-  const GiftingApp({super.key});
+  const GiftingApp({super.key, this.showSplash = true});
+
+  /// 是否先展示加载页（测试环境关闭，直接进主框架）
+  final bool showSplash;
 
   @override
   Widget build(BuildContext context) {
@@ -25,8 +29,28 @@ class GiftingApp extends StatelessWidget {
       title: '专属美食关怀',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const MainShell(),
+      home: showSplash ? const _Root() : const MainShell(),
     );
+  }
+}
+
+/// 启动入口：先展示加载页（后端每日随机图片），结束后进入主界面。
+class _Root extends StatefulWidget {
+  const _Root();
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  bool _splashDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_splashDone) {
+      return SplashPage(onFinished: () => setState(() => _splashDone = true));
+    }
+    return const MainShell();
   }
 }
 

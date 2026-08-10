@@ -46,6 +46,58 @@ class Restaurant(models.Model):
         return self.records.order_by('-date').first()
 
 
+class SplashImage(models.Model):
+    """APP 启动加载页图片：每天随机展示一张，相邻两天不重复（由 SplashState 记录）。"""
+
+    title = models.CharField('标题', max_length=100, blank=True)
+    image = models.ImageField('图片', upload_to='splash/')
+    enabled = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '加载页图片'
+        verbose_name_plural = '加载页图片'
+        ordering = ['id']
+
+    def __str__(self):
+        return self.title or f'加载页图片 #{self.pk}'
+
+
+class SplashState(models.Model):
+    """加载页展示状态（单例）：记录最近一次展示的日期与图片，保证相邻两天不重复。"""
+
+    last_date = models.CharField('上次展示日期', max_length=10, blank=True)
+    last_id = models.IntegerField('上次展示图片ID', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '加载页状态'
+        verbose_name_plural = '加载页状态'
+
+    def __str__(self):
+        return f'{self.last_date} → 图片 #{self.last_id}'
+
+
+class Story(models.Model):
+    """故事书：历史小故事等内容，支持分类与封面图。"""
+
+    title = models.CharField('标题', max_length=200)
+    category = models.CharField('分类', max_length=50, default='历史故事')
+    content = models.TextField('内容')
+    cover = models.ImageField('封面图', upload_to='story_covers/', blank=True, null=True)
+    source = models.CharField('来源/作者', max_length=100, blank=True)
+    enabled = models.BooleanField('上架', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '故事'
+        verbose_name_plural = '故事'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return self.title
+
+
 class DiningRecord(models.Model):
     """一次用餐记录：时间、评分、点评正文与回忆。"""
 

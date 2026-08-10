@@ -97,6 +97,12 @@ python manage.py runserver 0.0.0.0:8000
 | `POST /api/wishlist/<id>/eaten/` | 标记已尝 |
 | `POST /api/recommend/chat/` | AI 推荐官（SSE 流式多轮对话） |
 | `POST /api/recommend/verify/` | 推荐卡片真实性校验（高德兜底） |
+| `GET /api/splash/` | 当日加载页图片（同一天固定一张、相邻两天不重复） |
+| `POST /api/splash/upload/` | 上传加载页图片（需 `X-Upload-Token`，multipart） |
+| `GET/POST /api/stories/` | 故事列表（支持 `?category=`、`?content=1`） / 上传故事（需 Token） |
+| `GET /api/stories/<id>/` | 故事详情（含正文） |
+| `GET /api/stories/random/` | 随机一篇故事（含正文） |
+| `GET /api/stories/categories/` | 故事分类列表 |
 
 ### 让 APP 走后端（局域网）
 

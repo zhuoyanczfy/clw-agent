@@ -5,7 +5,8 @@ import 'package:gifting_app/main.dart';
 
 void main() {
   testWidgets('主框架冒烟测试', (WidgetTester tester) async {
-    await tester.pumpWidget(const GiftingApp());
+    // 加载页依赖网络，测试直接进入主框架
+    await tester.pumpWidget(const GiftingApp(showSplash: false));
     await tester.pump(const Duration(seconds: 1));
 
     // 底部导航三个 Tab 存在

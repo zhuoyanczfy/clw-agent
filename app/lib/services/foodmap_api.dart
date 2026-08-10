@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import '../models/dining_record.dart';
 import '../models/district.dart';
 import '../models/restaurant.dart';
+import '../models/splash_image.dart';
+import '../models/story.dart';
 import '../models/wishlist_item.dart';
 import 'api_config.dart';
 
@@ -212,6 +214,51 @@ class FoodmapApi {
   static Future<String> photoUrl(String path) async {
     final base = await _base();
     return '$base$path';
+  }
+
+  /// 媒体文件完整地址（加载页/故事封面等相对路径，需拼接服务地址）
+  static Future<String> mediaUrl(String path) async {
+    final base = await _base();
+    return '$base$path';
+  }
+
+  // ---------- 加载页 ----------
+
+  /// 当日加载页图片（后端保证同一天固定一张、相邻两天不重复）
+  static Future<SplashImage> fetchSplash() async {
+    final json = await _getJson('/api/splash/') as Map<String, dynamic>;
+    return SplashImage.fromJson(json['splash'] as Map<String, dynamic>);
+  }
+
+  // ---------- 故事书 ----------
+
+  /// 故事列表；[category] 按分类过滤（默认不带正文）
+  static Future<List<Story>> fetchStories({String? category}) async {
+    final query = category == null || category.isEmpty
+        ? ''
+        : '?category=${Uri.encodeQueryComponent(category)}';
+    final json = await _getJson('/api/stories/$query') as Map<String, dynamic>;
+    return (json['stories'] as List)
+        .map((e) => Story.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 故事详情（含正文）
+  static Future<Story> fetchStoryDetail(int id) async {
+    final json = await _getJson('/api/stories/$id/') as Map<String, dynamic>;
+    return Story.fromJson(json['story'] as Map<String, dynamic>);
+  }
+
+  /// 随机一篇故事（含正文）
+  static Future<Story> fetchRandomStory() async {
+    final json = await _getJson('/api/stories/random/') as Map<String, dynamic>;
+    return Story.fromJson(json['story'] as Map<String, dynamic>);
+  }
+
+  /// 全部故事分类
+  static Future<List<String>> fetchStoryCategories() async {
+    final json = await _getJson('/api/stories/categories/') as Map<String, dynamic>;
+    return (json['categories'] as List).cast<String>();
   }
 
   // ---------- 待尝清单 ----------

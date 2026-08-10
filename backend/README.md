@@ -10,6 +10,8 @@
 - **用餐记录**：餐厅 + 日期 + 星星评分 + 人均消费 + 心情标签 + 点评正文 + 照片，支持增删改（multipart 上传）
 - **两种录入方式**：选择已有餐厅，或直接新建餐厅（自动归入所选区）
 - **AI 智能推荐**：与"南京美食推荐官"多轮对话（DeepSeek，SSE 流式）。推荐官由 `foodmap/agents/recommender/agent.md` 定义（改文件即生效），通过 function calling 调用工具查询本地真实餐厅库，只从查询结果中推荐（查无结果会诚实说明），推荐卡片展示真实评分/地址并一键收藏到待尝清单
+- **随机加载页**：`/api/splash/` 每日随机返回一张加载页图片（同一天固定、相邻两天不重复），上传接口 `/api/splash/upload/` 配合 Django Admin 维护图片库
+- **故事书**：`/api/stories/` 系列接口提供历史小故事（分类/列表/详情/随机），上传支持 JSON 与 multipart（封面图），Admin 可直接管理
 - **真实餐厅数据**：一键从高德导入南京全部真实餐饮 POI（名称/地址/坐标/评分），AI 推荐直接关联数据库真实餐厅（按高德 POI ID），未关联的卡片才走高德在线校验兜底
 - **Django Admin 后台**：随时补录/管理数据
 
@@ -69,9 +71,9 @@ python manage.py runserver 0.0.0.0:8000
 ├── requirements.txt
 ├── config/                  # Django 项目配置 + config.ini（API Key 等自定义配置）
 ├── foodmap/                 # 业务应用（纯 REST API）
-│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单
+│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单 / 加载页 / 故事
 │   ├── views.py             # 全部 API 视图（JsonResponse + SSE 流式聊天）
-│   ├── urls.py              # 17 个 /api/ 路由（见根 README 主要 API 表）
+│   ├── urls.py              # 23 个 /api/ 路由（见根 README 主要 API 表）
 │   ├── dishes_data.py       # 40 道美食库（每日推荐数据源，与 APP 内置一致）
 │   ├── agents/recommender/agent.md   # 推荐官定义（frontmatter + Goal/Backstory/Task Template/Expected Output）
 │   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）
@@ -80,7 +82,7 @@ python manage.py runserver 0.0.0.0:8000
 │   ├── geodata/             # 南京区划 GeoJSON
 │   ├── management/commands/seed_demo.py
 │   └── migrations/          # 数据库迁移
-├── media/                   # 用户上传的用餐照片（不入库）
+├── media/                   # 用户上传的用餐照片 / 加载页图片 / 故事封面（不入库）
 └── deploy/                  # 生产部署（Nginx + Gunicorn + MySQL）
 ```
 
@@ -112,6 +114,7 @@ python manage.py runserver 0.0.0.0:8000
 1. 生产环境在 `config/config.ini` 的 `[deploy]` 节配置：`env=prod`、`secret_key`、`allowed_hosts`（域名）、MySQL 连接参数；本地开发保持 `env=dev`（SQLite）互不影响
 2. 数据库迁移：本地 `dumpdata` 导出 → 服务器 `migrate` + `loaddata` 导入，`media/` 目录整体同步
 3. 高德 `MAP_KEY` 需在控制台把服务器公网 IP 加入白名单
+4. 加载页/故事上传接口需在 `config/config.ini` 配置 `UPLOAD_TOKEN`（请求头 `X-Upload-Token`，留空则禁用 API 上传，仍可用 Admin 管理）
 
 ## 后续可做
 

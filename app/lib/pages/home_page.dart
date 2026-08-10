@@ -7,6 +7,7 @@ import '../services/dish_service.dart';
 import '../services/notification_service.dart';
 import '../theme.dart';
 import 'dish_page.dart';
+import 'story_book_page.dart';
 
 /// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态
 class HomePage extends StatefulWidget {
@@ -58,6 +59,8 @@ class _HomePageState extends State<HomePage> {
                 _buildTodayDishCard(),
                 const SizedBox(height: 20),
                 _buildReminderCard(),
+                const SizedBox(height: 20),
+                _buildStoryCard(),
               ],
             ),
           ),
@@ -360,6 +363,62 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
+    );
+  }
+
+  // ---- 故事书入口卡片 ----
+  Widget _buildStoryCard() {
+    return Card(
+      child: InkWell(
+        onTap: _openStoryBook,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE9E9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Center(
+                  child: Text('📖', style: TextStyle(fontSize: 22)),
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '故事书',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textDark,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '读一段历史小故事，慢慢品味',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textLight),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppTheme.textLight),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openStoryBook() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const StoryBookPage()),
     );
   }
 }

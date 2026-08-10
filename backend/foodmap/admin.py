@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DiningRecord, District, Restaurant, WishlistItem
+from .models import DiningRecord, District, Restaurant, SplashImage, Story, WishlistItem
 
 
 @admin.register(District)
@@ -37,3 +37,18 @@ class WishlistItemAdmin(admin.ModelAdmin):
     list_display = ('name', 'district', 'status', 'source', 'per_capita', 'created_at')
     list_filter = ('status', 'source')
     search_fields = ('name', 'reason')
+
+
+@admin.register(SplashImage)
+class SplashImageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'enabled', 'created_at')
+    list_filter = ('enabled',)
+    list_editable = ('enabled',)
+
+
+@admin.register(Story)
+class StoryAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'enabled', 'source', 'updated_at')
+    list_filter = ('category', 'enabled')
+    search_fields = ('title', 'content')
+    list_editable = ('enabled',)
