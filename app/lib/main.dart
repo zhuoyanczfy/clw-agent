@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'pages/ai_recommend_page.dart';
 import 'pages/food_page.dart';
+import 'pages/footprint_page.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'services/notification_service.dart';
@@ -28,7 +30,7 @@ class GiftingApp extends StatelessWidget {
   }
 }
 
-/// 主框架：底部导航（首页 / 美食 / 设置）
+/// 主框架：底部导航（首页 / 美食 / 足迹 / 推荐官 / 设置）
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -46,9 +48,11 @@ class _MainShellState extends State<MainShell> {
         index: _index,
         children: [
           HomePage(
-            onOpenSettings: () => setState(() => _index = 2),
+            onOpenSettings: () => setState(() => _index = 4),
           ),
           const FoodPage(),
+          const FootprintPage(),
+          const AiRecommendPage(),
           const SettingsPage(),
         ],
       ),
@@ -67,6 +71,16 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.restaurant_menu_outlined),
             selectedIcon: Icon(Icons.restaurant_menu, color: AppTheme.primaryDark),
             label: '美食',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            selectedIcon: Icon(Icons.map, color: AppTheme.primaryDark),
+            label: '足迹',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.smart_toy_outlined),
+            selectedIcon: Icon(Icons.smart_toy, color: AppTheme.primaryDark),
+            label: '推荐官',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

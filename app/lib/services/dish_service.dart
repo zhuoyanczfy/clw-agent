@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 
-import '../config/app_config.dart';
 import '../data/dishes.dart';
 import '../models/dish.dart';
+import 'api_config.dart';
 
 /// 美食服务：优先从后端拉取今日推荐，失败或未配置时使用内置美食库。
 /// 内置库的取模算法与后端保持一致（md5(date) 前 8 位十六进制取整再取模），
@@ -14,11 +14,11 @@ class DishService {
   /// 获取今日推荐
   static Future<Dish> getTodayDish() async {
     final dateStr = _dateString(DateTime.now());
-    if (AppConfig.serverUrl.isNotEmpty) {
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isNotEmpty) {
       try {
-        final base = AppConfig.serverUrl.replaceAll(RegExp(r'/$'), '');
         final resp = await http
-            .get(Uri.parse('$base/api/dish/today'))
+            .get(Uri.parse('$base/api/dish/today/'))
             .timeout(const Duration(seconds: 5));
         if (resp.statusCode == 200) {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));

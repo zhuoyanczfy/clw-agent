@@ -152,8 +152,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-STATICFILES_DIRS = [BASE_DIR / 'static']
-
 # 用户上传的用餐照片（多图）
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

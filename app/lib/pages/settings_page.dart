@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../services/api_config.dart';
+import '../services/foodmap_api.dart';
 import '../services/notification_service.dart';
 import '../theme.dart';
 
-/// 设置页：每日关怀提醒（喝水 / 晚安 / 美食推荐）的时间与开关
+/// 设置页：后端服务地址 + 每日关怀提醒（喝水 / 晚安 / 美食推荐）
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -15,10 +17,64 @@ class _SettingsPageState extends State<SettingsPage> {
   ReminderSettings? _settings;
   bool _saving = false;
 
+  // 后端服务地址
+  final _serverCtrl = TextEditingController();
+  String _savedServerUrl = '';
+  bool _testing = false;
+  String? _testResult;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadServerUrl();
+  }
+
+  @override
+  void dispose() {
+    _serverCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadServerUrl() async {
+    final url = await ApiConfig.getBaseUrl();
+    if (!mounted) return;
+    setState(() {
+      _savedServerUrl = url;
+      _serverCtrl.text = url;
+    });
+  }
+
+  Future<void> _saveServer() async {
+    final url = _serverCtrl.text.trim();
+    await ApiConfig.saveBaseUrl(url);
+    if (!mounted) return;
+    setState(() {
+      _savedServerUrl = url.replaceAll(RegExp(r'/$'), '');
+      _testResult = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('后端地址已保存'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> _testServer() async {
+    final url = _serverCtrl.text.trim();
+    if (url.isEmpty) {
+      setState(() => _testResult = '请先填写地址');
+      return;
+    }
+    await ApiConfig.saveBaseUrl(url);
+    setState(() {
+      _testing = true;
+      _testResult = null;
+    });
+    final ok = await FoodmapApi.health();
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _testResult = ok ? '✅ 连接成功，后端服务正常' : '❌ 无法连接，请检查地址与网络';
+    });
   }
 
   Future<void> _load() async {
@@ -88,6 +144,72 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 20),
 
+                    // ---- 后端服务 ----
+                    _sectionHeader('🌐', '后端服务', '美食足迹的数据来源'),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _serverCtrl,
+                              keyboardType: TextInputType.url,
+                              decoration: const InputDecoration(
+                                labelText: '后端地址',
+                                hintText: 'http://192.168.1.100:8000',
+                                helperText: '电脑与手机需在同一网络；部署公网后填域名',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if (_testResult != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  _testResult!,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: _testing ? null : _testServer,
+                                    child: _testing
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : const Text('测试连接'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed: _saveServer,
+                                    child: const Text('保存地址'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_savedServerUrl.isEmpty) ...[
+                              const SizedBox(height: 8),
+                              const Text(
+                                '未配置时，每日美食使用内置库；足迹/记录/推荐官需要后端',
+                                style: TextStyle(
+                                    fontSize: 11, color: AppTheme.textLight),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     // ---- 喝水提醒 ----
                     _sectionHeader('💧', '喝水提醒', '一天 3 次，提醒她补水'),
                     const SizedBox(height: 12),

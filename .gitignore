@@ -10,7 +10,7 @@ app/android/local.properties
 app/android/app/.cxx/
 app/android/app/.externalNativeBuild/
 
-# 生成的图标预览（源脚本 server/gen_icon.py 保留）
+# 生成的图标预览
 app/icon_preview.png
 
 # ---- Python ----
@@ -19,11 +19,11 @@ __pycache__/
 .venv/
 venv/
 
-# ---- Web (Django) 本地环境 ----
-web/.venv/
-web/config/config.ini          # 含 DeepSeek/高德 API Key，勿提交（模板：config.ini.example）
-web/db.sqlite3                 # 本地数据库（含个人回忆数据，仅本地）
-web/media/
+# ---- Backend (Django) 本地环境 ----
+backend/.venv/
+backend/config/config.ini     # 含 DeepSeek/高德 API Key，勿提交（模板：config.ini.example）
+backend/db.sqlite3            # 本地数据库（含个人回忆数据，仅本地）
+backend/media/
 
 # ---- IDE ----
 .idea/

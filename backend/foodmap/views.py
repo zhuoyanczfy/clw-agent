@@ -1,0 +1,512 @@
+# -*- coding: utf-8 -*-
+"""纯 API 视图：为 Flutter APP 提供数据接口（网页版已移除）。"""
+import json
+import os
+from pathlib import Path
+
+from django import forms
+from django.db.models import Count
+from django.http import JsonResponse, StreamingHttpResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+
+from .dishes_data import DISHES, dish_for_date
+from .models import DiningRecord, DiningRecordPhoto, District, Restaurant, WishlistItem
+from .services.agent import build_system_prompt, execute_tool_calls
+from .services.llm import LLMError, chat_stream, chat_tool_round
+from .services.profile import build_taste_profile
+from .services.tools.registry import tools_schema
+
+GEOJSON_PATH = Path(__file__).parent / 'geodata' / 'nanjing_districts.json'
+
+# ============ 基础与每日推荐 ============
+
+
+def api_health(request):
+    """健康检查：APP 启动时探测后端是否可达。"""
+    return JsonResponse({'ok': True, 'service': 'clw-agent backend'})
+
+
+def api_dishes(request):
+    """全部菜品（每日推荐数据源）。"""
+    return JsonResponse({'total': len(DISHES), 'dishes': DISHES})
+
+
+def api_dish_today(request):
+    """今日推荐（与 APP 内置算法一致：md5(日期) 取模）。"""
+    import datetime
+    today = datetime.date.today().isoformat()
+    return JsonResponse({'date': today, 'dish': dish_for_date(today)})
+
+
+def api_dish_by_date(request, date):
+    """指定日期的推荐，date 形如 2026-08-10。"""
+    import datetime
+    try:
+        datetime.date.fromisoformat(date)
+    except ValueError:
+        return JsonResponse({'error': '日期格式错误，应为 YYYY-MM-DD'}, status=400)
+    return JsonResponse({'date': date, 'dish': dish_for_date(date)})
+
+
+# ============ 区与餐厅 ============
+
+
+def _district_stats():
+    return District.objects.annotate(
+        rest_count=Count('restaurants', distinct=True),
+        visited_count=Count('restaurants__records', distinct=True),
+    ).order_by('id')
+
+
+def api_districts(request):
+    """全部区（含区内餐厅库数量 / 去过餐厅数）。"""
+    data = [
+        {
+            'id': d.id, 'name': d.name, 'adcode': d.adcode,
+            'restaurant_count': d.rest_count, 'visited_count': d.visited_count,
+        }
+        for d in _district_stats()
+    ]
+    return JsonResponse({'districts': data})
+
+
+def api_districts_geojson(request):
+    """南京区划 GeoJSON（flutter_map 分区高亮用），附加区内统计。"""
+    with GEOJSON_PATH.open(encoding='utf-8') as f:
+        geojson = json.load(f)
+    stats = {
+        d.adcode: (
+            d.restaurants.count(),
+            d.restaurants.filter(records__isnull=False).distinct().count(),
+        )
+        for d in District.objects.prefetch_related('restaurants')
+    }
+    for feature in geojson['features']:
+        props = feature['properties']
+        adcode = str(props.get('adcode'))
+        props['adcode'] = adcode
+        props['restaurant_count'], props['visited_count'] = stats.get(adcode, (0, 0))
+    return JsonResponse(geojson)
+
+
+def _restaurant_json(r, with_records=False):
+    data = {
+        'id': r.pk,
+        'name': r.name,
+        'district_id': r.district_id,
+        'district': r.district.name,
+        'address': r.address,
+        'lat': r.lat,
+        'lng': r.lng,
+        'amap_id': r.amap_id,
+        'rating': r.rating,
+        'record_count': getattr(r, 'rec_count', r.records.count()),
+    }
+    if with_records:
+        data['records'] = [
+            {
+                'id': rec.pk,
+                'date': rec.date.isoformat(),
+                'rating': rec.rating,
+                'comment': rec.comment,
+                'per_capita': rec.per_capita,
+                'mood': rec.mood,
+            }
+            for rec in r.records.all()
+        ]
+    return data
+
+
+def api_restaurants(request):
+    """餐厅列表。?district=区名 过滤；?visited=1 只看去过（地图标记用）。"""
+    qs = Restaurant.objects.select_related('district').annotate(rec_count=Count('records'))
+    district = request.GET.get('district')
+    if district:
+        qs = qs.filter(district__name=district)
+    if request.GET.get('visited') == '1':
+        qs = qs.filter(rec_count__gt=0)
+    qs = qs.order_by('-rec_count', '-rating', 'name')
+    return JsonResponse({'restaurants': [_restaurant_json(r) for r in qs]})
+
+
+def api_restaurant_detail(request, restaurant_id):
+    """餐厅详情 + 全部用餐记录。"""
+    restaurant = get_object_or_404(
+        Restaurant.objects.select_related('district').prefetch_related('records'),
+        pk=restaurant_id,
+    )
+    return JsonResponse({'restaurant': _restaurant_json(restaurant, with_records=True)})
+
+
+# ============ 用餐记录 ============
+
+
+def _photo_json(photo):
+    return {'id': photo.pk, 'url': photo.image.url}
+
+
+def _record_json(record, with_photos=True):
+    data = {
+        'id': record.pk,
+        'restaurant_id': record.restaurant_id,
+        'restaurant': record.restaurant.name,
+        'district': record.restaurant.district.name,
+        'date': record.date.isoformat(),
+        'rating': record.rating,
+        'comment': record.comment,
+        'per_capita': record.per_capita,
+        'mood': record.mood,
+        'created_at': record.created_at.strftime('%Y-%m-%d %H:%M'),
+    }
+    if with_photos:
+        data['photos'] = [_photo_json(p) for p in record.photos.all()]
+    return data
+
+
+def _record_from_data(data, record=None):
+    """从 JSON body 组装/更新记录：支持选已有餐厅或新建餐厅（restaurant_name + district_id）。"""
+    fields = {}
+    restaurant_id = data.get('restaurant_id')
+    if restaurant_id:
+        fields['restaurant'] = get_object_or_404(Restaurant, pk=restaurant_id)
+    else:
+        name = (data.get('restaurant_name') or '').strip()
+        if not name:
+            raise ValueError('请选择已有餐厅，或填写新餐厅名称')
+        district = None
+        district_id = data.get('district_id')
+        if district_id:
+            district = District.objects.filter(pk=district_id).first()
+        if not district:
+            raise ValueError('新餐厅必须选择所属区')
+        fields['restaurant'] = Restaurant.objects.create(name=name, district=district)
+
+    for key, default in (('rating', 4), ('per_capita', None)):
+        value = data.get(key, default)
+        if key == 'per_capita':
+            try:
+                value = int(value) if value else None
+            except (TypeError, ValueError):
+                value = None
+        fields[key] = value
+
+    for key in ('date', 'comment', 'mood'):
+        fields[key] = data.get(key, '')
+        if key == 'date':
+            if not fields[key]:
+                raise ValueError('用餐日期不能为空')
+            import datetime as _dt
+            try:
+                fields[key] = _dt.date.fromisoformat(fields[key])
+            except ValueError:
+                raise ValueError('用餐日期格式应为 YYYY-MM-DD')
+    if record:
+        for k, v in fields.items():
+            setattr(record, k, v)
+        return record
+    return DiningRecord(**fields)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_records(request):
+    """记录列表（?restaurant=餐厅id 过滤）或新建记录。"""
+    if request.method == 'GET':
+        qs = (
+            DiningRecord.objects.select_related('restaurant__district')
+            .prefetch_related('photos')
+            .order_by('-date', '-id')
+        )
+        restaurant_id = request.GET.get('restaurant')
+        if restaurant_id:
+            qs = qs.filter(restaurant_id=restaurant_id)
+        return JsonResponse({'records': [_record_json(r) for r in qs]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    try:
+        record = _record_from_data(data)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    record.save()
+    return JsonResponse({'ok': True, 'record': _record_json(record)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def api_record_detail(request, record_id):
+    """记录详情 / 编辑 / 删除。"""
+    record = get_object_or_404(
+        DiningRecord.objects.select_related('restaurant__district').prefetch_related('photos'),
+        pk=record_id,
+    )
+    if request.method == 'GET':
+        return JsonResponse({'record': _record_json(record)})
+
+    if request.method == 'DELETE':
+        # 先删数据库行，再删磁盘文件（Django 不会自动清理）
+        for photo in record.photos.all():
+            path = photo.image.path
+            photo.delete()
+            try:
+                os.remove(path)
+            except (FileNotFoundError, OSError):
+                pass
+        record.delete()
+        return JsonResponse({'ok': True})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    try:
+        record = _record_from_data(data, record=record)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    record.save()
+    return JsonResponse({'ok': True, 'record': _record_json(record)})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_photo_upload(request, record_id):
+    """上传用餐照片（multipart，字段名 photos，可多张）。"""
+    record = get_object_or_404(DiningRecord, pk=record_id)
+    photo_field = forms.ImageField()
+    saved = []
+    for f in request.FILES.getlist('photos'):
+        try:
+            photo_field.clean(f)
+        except forms.ValidationError as exc:
+            return JsonResponse({'error': f'照片「{f.name}」无效：{exc}'}, status=400)
+        photo = DiningRecordPhoto.objects.create(record=record, image=f)
+        saved.append(_photo_json(photo))
+    return JsonResponse({'ok': True, 'photos': saved})
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_photo_delete(request, photo_id):
+    """删除单张照片（数据库行 + 磁盘文件）。"""
+    photo = get_object_or_404(DiningRecordPhoto, pk=photo_id)
+    path = photo.image.path
+    photo.delete()
+    try:
+        os.remove(path)
+    except (FileNotFoundError, OSError):
+        pass
+    return JsonResponse({'ok': True})
+
+
+# ============ 待尝清单 ============
+
+
+def _wishlist_json(item):
+    return {
+        'id': item.pk,
+        'name': item.name,
+        'amap_id': item.amap_id,
+        'district_id': item.district_id,
+        'district': item.district.name if item.district else '',
+        'reason': item.reason,
+        'per_capita': item.per_capita,
+        'status': item.status,
+        'source': item.source,
+        'created_at': item.created_at.strftime('%Y-%m-%d %H:%M'),
+    }
+
+
+def _parse_per_capita(value):
+    try:
+        if value:
+            parsed = int(value)
+            return parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_wishlist(request):
+    """待尝清单列表（?status=pending|eaten）或添加。"""
+    if request.method == 'GET':
+        qs = WishlistItem.objects.select_related('district').order_by('-created_at')
+        status = request.GET.get('status')
+        if status:
+            qs = qs.filter(status=status)
+        return JsonResponse({'items': [_wishlist_json(i) for i in qs]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': '餐厅名称不能为空'}, status=400)
+
+    # 优先按高德 POI ID 关联已导入的真实餐厅（区也以它为准）
+    amap_id = (data.get('amap_id') or '').strip() or None
+    district = None
+    if amap_id:
+        existing = Restaurant.objects.filter(amap_id=amap_id).first()
+        if existing:
+            district = existing.district
+    if not district:
+        district_id = data.get('district_id')
+        district = District.objects.filter(pk=district_id).first() if district_id else None
+    if not district:
+        district_name = (data.get('district') or '').strip()
+        district = District.objects.filter(name=district_name).first() if district_name else None
+
+    existed = WishlistItem.objects.filter(name__iexact=name, status='pending').first()
+    if existed:
+        return JsonResponse({'ok': True, 'existed': True, 'item': _wishlist_json(existed)})
+
+    item = WishlistItem.objects.create(
+        name=name,
+        amap_id=amap_id,
+        district=district,
+        reason=(data.get('reason') or '')[:300],
+        per_capita=_parse_per_capita(data.get('per_capita')),
+        source=data.get('source') if data.get('source') in ('ai', 'manual') else 'ai',
+    )
+    return JsonResponse({'ok': True, 'item': _wishlist_json(item)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_wishlist_eaten(request, item_id):
+    """标记待尝为已尝。"""
+    item = get_object_or_404(WishlistItem, pk=item_id)
+    item.status = 'eaten'
+    item.save(update_fields=['status'])
+    return JsonResponse({'ok': True, 'item': _wishlist_json(item)})
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_wishlist_delete(request, item_id):
+    """删除待尝项。"""
+    item = get_object_or_404(WishlistItem, pk=item_id)
+    item.delete()
+    return JsonResponse({'ok': True})
+
+
+# ============ AI 智能推荐 ============
+
+MAX_HISTORY = 20
+TOOLS_SCHEMA = tools_schema()
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_recommend_verify(request):
+    """校验 AI 推荐卡片是否真实存在（高德搜索）。body: {"items": [{"name","district"?}]}"""
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    from .services.amap import AMAPError, search_text
+    results = []
+    for item in data.get('items') or []:
+        name = (item.get('name') or '').strip()
+        district_hint = (item.get('district') or '').strip()
+        result = {'name': name, 'ok': False}
+        if not name:
+            results.append(result)
+            continue
+        try:
+            pois = search_text(name)
+        except AMAPError as exc:
+            return JsonResponse({'error': str(exc)}, status=502)
+
+        best = None
+        for poi in pois:
+            poi_name = (poi.get('name') or '').strip()
+            name_ok = poi_name == name or poi_name in name or name in poi_name
+            if not name_ok:
+                continue
+            if not district_hint or poi.get('adname') == district_hint:
+                best = poi
+                break
+            if best is None:
+                best = poi
+        if best:
+            biz_ext = best.get('biz_ext') or {}
+            try:
+                rating = float(biz_ext.get('rating'))
+            except (TypeError, ValueError):
+                rating = None
+            result.update({
+                'ok': True,
+                'amap_id': best.get('id'),
+                'name': best.get('name'),
+                'address': best.get('address'),
+                'district': best.get('adname') or '',
+                'rating': rating,
+            })
+        results.append(result)
+    return JsonResponse({'ok': True, 'items': results})
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_chat(request):
+    """SSE 流式对话接口（无状态：历史由客户端传入）。
+
+    POST body: {"message": "...", "history": [{"role": "user|assistant", "content": "..."}]}
+    响应为 text/event-stream，每行 data: {delta}，结束行 data: [DONE]。
+    """
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    message = (data.get('message') or '').strip()
+    if not message:
+        return JsonResponse({'error': '消息不能为空'}, status=400)
+
+    # 客户端传入的历史（只保留 user/assistant 文本轮）
+    history = [m for m in (data.get('history') or []) if m.get('role') in ('user', 'assistant')]
+    history = history[-MAX_HISTORY:]
+    history.append({'role': 'user', 'content': message})
+
+    # system prompt 由 agent.md 定义（backend/foodmap/agents/recommender/agent.md）
+    system_msg = {'role': 'system', 'content': build_system_prompt(profile=build_taste_profile(), task=message)}
+    messages_payload = [system_msg] + history
+
+    def sse_generator():
+        full_reply = ''
+        try:
+            tool_round = chat_tool_round(messages_payload, TOOLS_SCHEMA)
+            tool_calls = tool_round.get('tool_calls') or []
+            if tool_calls:
+                assistant_msg = {
+                    'role': 'assistant',
+                    'content': tool_round.get('content') or '',
+                    'tool_calls': tool_calls,
+                }
+                tool_results = execute_tool_calls(tool_calls)
+                final_messages = messages_payload + [assistant_msg] + tool_results
+                for delta in chat_stream(final_messages):
+                    full_reply += delta
+                    yield f'data: {json.dumps({"delta": delta}, ensure_ascii=False)}\n\n'
+            else:
+                full_reply = tool_round.get('content') or ''
+                yield f'data: {json.dumps({"delta": full_reply}, ensure_ascii=False)}\n\n'
+            yield 'data: [DONE]\n\n'
+        except LLMError as exc:
+            yield f'data: {json.dumps({"error": str(exc)}, ensure_ascii=False)}\n\n'
+            yield 'data: [DONE]\n\n'
+
+    response = StreamingHttpResponse(sse_generator(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response

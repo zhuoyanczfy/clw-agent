@@ -1,4 +1,4 @@
-/// 内置美食库（与后端 server/dishes.py 保持一致，断网时按日期轮换使用）
+/// 内置美食库（与后端 backend/foodmap/dishes_data.py 保持一致，断网时按日期轮换使用）
 library;
 
 import '../models/dish.dart';

@@ -1,21 +1,23 @@
-# 南京美食足迹 🍜
+# 南京美食足迹 · Django API 后端 🍜
 
-用 Django 打造的个人美食回忆地图：记录吃过的每一家餐厅、每一次用餐的点评与心情，在南京分区地图上留下自己的足迹。
+「专属美食关怀」APP 的数据中枢：南京真实餐厅库、用餐记录、待尝清单、AI 推荐官全部由本后端提供，APP 通过 REST API 调用获取数据。
 
 ## 功能
 
-- **分区地图主界面**：南京 11 个区可点击（多边形高亮，颜色深浅表示去过几家店），去过餐厅以 🍽️ 标记在地图上，点击查看回忆
-- **底部导航**：不点地图也能直接通过底部的横滑区选择条 / 区列表切换
-- **用餐记录**：餐厅 + 日期 + 星星评分 + 人均消费 + 心情标签 + 点评正文，支持增删改
+- **纯 REST API**：区 / 餐厅 / 用餐记录（含照片）/ 待尝清单 / AI 推荐官全部端点化，供 Flutter APP 调用（无网页视图）
+- **每日美食推荐**：`/api/dish/today/` 按日期轮换（与 APP 内置算法一致）
+- **分区地图数据**：`/api/districts.geojson` 下发南京 11 区划（APP 用 flutter_map 分区高亮），`/api/districts/` 附带各区餐厅数/足迹数
+- **用餐记录**：餐厅 + 日期 + 星星评分 + 人均消费 + 心情标签 + 点评正文 + 照片，支持增删改（multipart 上传）
 - **两种录入方式**：选择已有餐厅，或直接新建餐厅（自动归入所选区）
-- **AI 智能推荐**：底部导航第 4 个页签，与"南京美食推荐官"多轮对话（DeepSeek）。推荐官由 `foodmap/agents/recommender/agent.md` 定义（改文件即生效），通过 function calling 调用工具查询本地真实餐厅库，只从查询结果中推荐（查无结果会诚实说明），推荐卡片展示真实评分/地址并一键收藏到待尝清单
+- **AI 智能推荐**：与"南京美食推荐官"多轮对话（DeepSeek，SSE 流式）。推荐官由 `foodmap/agents/recommender/agent.md` 定义（改文件即生效），通过 function calling 调用工具查询本地真实餐厅库，只从查询结果中推荐（查无结果会诚实说明），推荐卡片展示真实评分/地址并一键收藏到待尝清单
 - **真实餐厅数据**：一键从高德导入南京全部真实餐饮 POI（名称/地址/坐标/评分），AI 推荐直接关联数据库真实餐厅（按高德 POI ID），未关联的卡片才走高德在线校验兜底
 - **Django Admin 后台**：随时补录/管理数据
 
 ## 技术栈
 
 - Django 4.2 LTS + Python 3.10 + SQLite（零外部依赖）
-- Leaflet + 阿里 DataV 南京区划 GeoJSON（无需申请任何地图 API Key）
+- 纯 JSON API（`JsonResponse` + `csrf_exempt`，无 DRF 依赖）
+- 阿里 DataV 南京区划 GeoJSON（无需申请任何地图 API Key）
 - DeepSeek Chat API（OpenAI 兼容，流式 SSE 输出），配置见 `config/config.ini`（`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`）
 - 轻量 Agent 层：MD 定义 Agent（`foodmap/agents/recommender/agent.md`）+ 工具注册表（`foodmap/services/tools/`）+ OpenAI 兼容 function calling，不引入 CrewAI
 - 高德地图 Web 服务 API（POI 搜索，个人免费 Key），配置见 `config/config.ini`（`MAP_KEY`）
@@ -41,24 +43,24 @@ python manage.py import_amap_poi --districts 鼓楼区,玄武区   # 只导入�
 python manage.py import_amap_poi --limit-per-grid 2 --dry-run  # 快速试跑（不写库）
 
 # 5. 启动
-python manage.py runserver
+python manage.py runserver 0.0.0.0:8000
 ```
 
-访问 http://127.0.0.1:8000
+- 健康检查：`http://127.0.0.1:8000/api/health/`
+- 今日美食：`http://127.0.0.1:8000/api/dish/today/`
 
 ## 数据管理
 
 - 后台管理：先 `python manage.py createsuperuser` 创建管理员，再访问 http://127.0.0.1:8000/admin
 - 命令行播种：见上（`seed_demo`）
 
-## 局域网/公网分享（给 TA 用）
+## 让 APP 连接后端
 
-```powershell
-python manage.py runserver 0.0.0.0:8000
-```
+1. 电脑跑起服务：`python manage.py runserver 0.0.0.0:8000`
+2. 手机连同一 WiFi，在 APP「设置」页 → 后端服务填 `http://<电脑局域网IP>:8000`（用 `ipconfig` 查看 IPv4 地址），测试连接通过后保存
+3. 足迹页 / 推荐官 / 待尝清单自动走后端数据
 
-- **同一 WiFi 下**：手机浏览器访问 `http://你的局域网IP:8000`（用 `ipconfig` 查看 IPv4 地址）
-- **不在同一网络**：用内网穿透工具（如 cpolar / natapp / frp）将 8000 端口映射到公网，把公网链接发给对方
+- **不在同一网络**：用内网穿透工具（如 cpolar / natapp / frp）将 8000 端口映射到公网，或部署到公网服务器（见下文生产部署），把公网地址填进 APP 设置页即可，APP 无需重新打包
 
 ## 项目结构
 
@@ -66,18 +68,20 @@ python manage.py runserver 0.0.0.0:8000
 ├── manage.py
 ├── requirements.txt
 ├── config/                  # Django 项目配置 + config.ini（API Key 等自定义配置）
-├── foodmap/                 # 业务应用
+├── foodmap/                 # 业务应用（纯 REST API）
 │   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单
-│   ├── forms.py             # 用餐记录表单（选餐厅 or 新建）
-│   ├── views.py             # 页面视图 + AI 推荐 SSE 对话 / 待尝 API
+│   ├── views.py             # 全部 API 视图（JsonResponse + SSE 流式聊天）
+│   ├── urls.py              # 17 个 /api/ 路由（见根 README 主要 API 表）
+│   ├── dishes_data.py       # 40 道美食库（每日推荐数据源，与 APP 内置一致）
 │   ├── agents/recommender/agent.md   # 推荐官定义（frontmatter + Goal/Backstory/Task Template/Expected Output）
 │   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）
 │   │   ├── agent.py         # agent.md 解析（mtime 缓存）+ system prompt 构建 + 工具轮编排
 │   │   └── tools/           # 工具注册表 registry.py + search_restaurants 实现
 │   ├── geodata/             # 南京区划 GeoJSON
 │   ├── management/commands/seed_demo.py
-│   └── templates/foodmap/   # 页面模板
-└── static/css/style.css     # 移动端优先样式
+│   └── migrations/          # 数据库迁移
+├── media/                   # 用户上传的用餐照片（不入库）
+└── deploy/                  # 生产部署（Nginx + Gunicorn + MySQL）
 ```
 
 ## Agent 架构（AI 推荐）
