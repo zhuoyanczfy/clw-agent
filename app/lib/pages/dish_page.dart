@@ -1,0 +1,213 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/dish.dart';
+import '../theme.dart';
+
+/// 美食详情页：大图 + 专属文案 + 做法 + 收藏
+class DishPage extends StatefulWidget {
+  const DishPage({super.key, required this.dish});
+
+  final Dish dish;
+
+  @override
+  State<DishPage> createState() => _DishPageState();
+}
+
+class _DishPageState extends State<DishPage> {
+  bool _isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFavorite();
+  }
+
+  Future<void> _checkFavorite() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('favorite_dish_ids') ?? [];
+    if (!mounted) return;
+    setState(() => _isFavorite = ids.contains(widget.dish.id));
+  }
+
+  Future<void> _toggleFavorite() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
+    if (ids.contains(widget.dish.id)) {
+      ids.remove(widget.dish.id);
+    } else {
+      ids.add(widget.dish.id);
+    }
+    await prefs.setStringList('favorite_dish_ids', ids);
+    if (!mounted) return;
+    setState(() => _isFavorite = !_isFavorite);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isFavorite ? '已收藏，下次约会就去吃它' : '已取消收藏'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dish = widget.dish;
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 10,
+                    child: CachedNetworkImage(
+                      imageUrl: dish.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (_, _) => Container(
+                        color: const Color(0xFFFFE9E9),
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (_, _, _) => Container(
+                        color: const Color(0xFFFFE9E9),
+                        child: const Center(
+                            child: Text('🫕', style: TextStyle(fontSize: 64))),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: IconButton.filledTonal(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton.filledTonal(
+                      onPressed: _toggleFavorite,
+                      icon: Icon(
+                        _isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: AppTheme.primaryDark,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFE9E9),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            dish.category,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppTheme.primaryDark),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      dish.name,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _sectionTitle('给你的悄悄话'),
+                    const SizedBox(height: 8),
+                    Text(
+                      dish.description,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: AppTheme.textDark,
+                        height: 1.8,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionTitle('做法小抄'),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7F3),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFFE0D6)),
+                      ),
+                      child: Text(
+                        dish.recipe,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textDark,
+                          height: 1.7,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    Center(
+                      child: FilledButton.icon(
+                        onPressed: _toggleFavorite,
+                        icon: Icon(
+                          _isFavorite ? Icons.favorite : Icons.favorite_border,
+                          size: 18,
+                        ),
+                        label: Text(_isFavorite ? '已收藏，记下这道想吃的' : '收藏，下次一起去吃'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 16,
+          decoration: BoxDecoration(
+            color: AppTheme.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textDark,
+          ),
+        ),
+      ],
+    );
+  }
+}

@@ -1,0 +1,30 @@
+# ---- Flutter / Dart ----
+app/build/
+app/.dart_tool/
+app/.flutter-plugins-dependencies
+app/.flutter-plugins
+app/.packages
+app/*.iml
+app/android/.gradle/
+app/android/local.properties
+app/android/app/.cxx/
+app/android/app/.externalNativeBuild/
+
+# 生成的图标预览（源脚本 server/gen_icon.py 保留）
+app/icon_preview.png
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.swp
+
+# ---- 系统与日志 ----
+Thumbs.db
+Desktop.ini
+*.log
