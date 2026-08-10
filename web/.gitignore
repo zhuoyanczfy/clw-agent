@@ -1,0 +1,24 @@
+# 密钥配置（含 API Key，勿提交）
+config/config.ini
+
+# 虚拟环境
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 数据库与本地数据
+db.sqlite3
+*.sqlite3
+
+# 用户上传的用餐照片
+media/
+
+# IDE
+.idea/
+.vscode/
+
+# 临时文件
+*.log
+tmp/

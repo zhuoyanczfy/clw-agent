@@ -19,6 +19,12 @@ __pycache__/
 .venv/
 venv/
 
+# ---- Web (Django) 本地环境 ----
+web/.venv/
+web/config/config.ini          # 含 DeepSeek/高德 API Key，勿提交（模板：config.ini.example）
+web/db.sqlite3                 # 本地数据库（含个人回忆数据，仅本地）
+web/media/
+
 # ---- IDE ----
 .idea/
 .vscode/

@@ -1,0 +1,18 @@
+DEEPSEEK_API_KEY=sk-你的DeepSeek密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+MAP_KEY=你的高德Web服务Key
+
+# ============ 生产部署配置（[deploy] 节，本地开发保持 env=dev） ============
+[deploy]
+env=dev
+# 生产环境必填：随机密钥（python -c "import secrets; print(secrets.token_urlsafe(50))"）
+secret_key=
+# 生产环境必填：你的域名，逗号分隔（如 foodmap.example.com,www.foodmap.example.com）
+allowed_hosts=
+# 服务器自建 MySQL 连接参数（生产环境使用）
+db_host=127.0.0.1
+db_port=3306
+db_name=foodmap
+db_user=foodmap
+db_password=

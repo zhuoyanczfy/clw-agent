@@ -1,0 +1,508 @@
+/* ===== 南京美食足迹 · 移动端优先 ===== */
+:root {
+    --primary: #ff7a3d;          /* 暖橙 */
+    --primary-dark: #e85d2a;
+    --accent: #ffb03a;           /* 暖黄 */
+    --bg: #fff8f2;               /* 奶油底 */
+    --card: #ffffff;
+    --text: #3d2f2a;
+    --text-light: #8a7a72;
+    --border: #f0e2d6;
+    --star: #ffb03a;
+    --danger: #e05c5c;
+    --radius: 14px;
+    --shadow: 0 2px 10px rgba(160, 100, 50, .10);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ===== 顶栏 ===== */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: #fff;
+    padding: env(safe-area-inset-top) 16px 12px;
+    box-shadow: 0 2px 8px rgba(232, 93, 42, .25);
+}
+.topbar-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.brand { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+.topbar .stat { font-size: 12px; opacity: .92; }
+.topbar .stat b { font-size: 15px; }
+.topbar .btn-back {
+    background: rgba(255, 255, 255, .22);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 13px;
+}
+
+/* ===== 内容区 ===== */
+.content {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 14px 14px calc(76px + env(safe-area-inset-bottom));
+}
+
+/* ===== 底部导航 ===== */
+.bottom-nav {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 100;
+    display: flex;
+    background: #fff;
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -2px 10px rgba(160, 100, 50, .08);
+}
+.nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 0 6px;
+    font-size: 11px;
+    color: var(--text-light);
+}
+.nav-item .nav-icon { font-size: 20px; line-height: 1; }
+.nav-item.active { color: var(--primary); font-weight: 600; }
+.nav-item.nav-add { font-size: 11px; }
+
+/* ===== 卡片 ===== */
+.card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+.card-link { display: block; }
+
+/* ===== 按钮 ===== */
+.btn {
+    display: inline-block;
+    border: none;
+    border-radius: 24px;
+    padding: 10px 22px;
+    font-size: 15px;
+    cursor: pointer;
+    background: var(--primary);
+    color: #fff;
+    transition: transform .1s, opacity .1s;
+}
+.btn:active { transform: scale(.97); opacity: .9; }
+.btn-block { display: block; width: 100%; text-align: center; }
+.btn-ghost {
+    background: transparent;
+    color: var(--primary-dark);
+    border: 1px solid var(--primary);
+}
+.btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    font-size: 13px;
+    padding: 5px 14px;
+}
+
+/* ===== 表单 ===== */
+.form-group { margin-bottom: 16px; }
+.form-group label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-light);
+    margin-bottom: 6px;
+}
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 15px;
+    background: #fff;
+    color: var(--text);
+    outline: none;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: var(--primary);
+}
+.form-errors {
+    background: #fdecec;
+    color: var(--danger);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 14px;
+}
+.hint { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+
+/* 星星评分 */
+.rating-stars { display: inline-flex; gap: 6px; flex-direction: row-reverse; justify-content: flex-end; }
+.rating-stars input { display: none; }
+.rating-stars label {
+    font-size: 30px;
+    color: #e8d8cc;
+    cursor: pointer;
+    transition: transform .1s, color .1s;
+}
+.rating-stars label:hover { transform: scale(1.15); }
+.rating-stars label.active,
+.rating-stars label:hover,
+.rating-stars label:hover ~ label { color: var(--star); }
+
+/* 新建餐厅区（默认隐藏） */
+#new-restaurant-fields { display: none; }
+
+/* ===== 首页地图 ===== */
+.map-wrap {
+    position: relative;
+    height: calc(100vh - 150px - 70px);
+    min-height: 420px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+#map { width: 100%; height: 100%; }
+.map-legend {
+    position: absolute;
+    top: 10px; left: 10px;
+    z-index: 500;
+    background: rgba(255, 255, 255, .92);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-light);
+    box-shadow: var(--shadow);
+    pointer-events: none;
+}
+
+/* 底部横滑区选择条 */
+.district-strip {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 2px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.district-strip::-webkit-scrollbar { display: none; }
+.strip-chip {
+    flex: 0 0 auto;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+}
+.strip-chip b { color: var(--primary-dark); }
+.strip-chip:active { background: var(--primary); color: #fff; }
+.strip-chip:active b { color: #fff; }
+.add-fab {
+    position: absolute;
+    right: 14px; bottom: 14px;
+    z-index: 600;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 54px; height: 54px;
+    font-size: 26px;
+    box-shadow: 0 4px 14px rgba(232, 93, 42, .4);
+    cursor: pointer;
+}
+
+/* ===== 区列表 / 区页 ===== */
+.page-title { font-size: 20px; font-weight: 700; margin: 6px 2px 14px; }
+.page-title .sub { font-size: 13px; color: var(--text-light); font-weight: 400; }
+.district-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.district-tile {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    position: relative;
+}
+.district-tile h3 { font-size: 16px; }
+.district-tile .meta { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+.district-tile .tile-count {
+    position: absolute;
+    top: 14px; right: 14px;
+    background: #fff0e6;
+    color: var(--primary-dark);
+    border-radius: 12px;
+    font-size: 12px;
+    padding: 2px 10px;
+    font-weight: 600;
+}
+
+/* ===== 餐厅 / 记录列表 ===== */
+.resto-card .resto-name { font-size: 16px; font-weight: 600; }
+.resto-card .resto-meta { font-size: 13px; color: var(--text-light); margin: 2px 0 6px; }
+.resto-card .resto-note {
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 6px 10px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.record-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.record-item .record-date { font-size: 13px; color: var(--text-light); }
+.record-item .record-summary { font-size: 14px; margin-top: 2px; }
+.stars { color: var(--star); letter-spacing: 2px; font-size: 14px; }
+.stars .dim { color: #e8d8cc; }
+.empty {
+    text-align: center;
+    color: var(--text-light);
+    padding: 48px 20px;
+    font-size: 14px;
+}
+.empty .empty-icon { font-size: 40px; display: block; margin-bottom: 10px; }
+
+/* ===== 记录详情 ===== */
+.record-hero { text-align: center; padding: 22px 16px; }
+.record-hero .stars { font-size: 26px; }
+.record-hero .mood {
+    display: inline-block;
+    margin-top: 10px;
+    background: #fff0e6;
+    color: var(--primary-dark);
+    border-radius: 14px;
+    padding: 3px 14px;
+    font-size: 13px;
+}
+.record-meta-row {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-light);
+}
+.record-comment {
+    font-size: 15px;
+    line-height: 1.9;
+    white-space: pre-wrap;
+}
+.record-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+/* ===== Toast ===== */
+.toasts {
+    position: fixed;
+    top: 60px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.toast {
+    background: rgba(61, 47, 42, .92);
+    color: #fff;
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-size: 14px;
+    box-shadow: var(--shadow);
+    animation: fade-in .25s ease;
+}
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 桌面端加宽优化 ===== */
+@media (min-width: 768px) {
+    .district-grid { grid-template-columns: repeat(3, 1fr); }
+    .content { padding-left: 20px; padding-right: 20px; }
+}
+
+/* ===== AI 推荐页 ===== */
+.ai-page { display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 420px; }
+.ai-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+.ai-tab {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 20px;
+    padding: 8px 0;
+    font-size: 14px;
+    color: var(--text-light);
+    cursor: pointer;
+}
+.ai-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    font-weight: 600;
+}
+.badge {
+    display: inline-block;
+    min-width: 18px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 9px;
+    font-size: 11px;
+    padding: 0 5px;
+    margin-left: 2px;
+}
+.ai-panel { display: none; flex: 1; flex-direction: column; min-height: 0; }
+.ai-panel.active { display: flex; }
+
+/* 聊天气泡 */
+.chat-box {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 2px 10px;
+    -webkit-overflow-scrolling: touch;
+}
+.msg { display: flex; margin-bottom: 12px; }
+.msg-user { justify-content: flex-end; }
+.msg-body {
+    max-width: 82%;
+    border-radius: 16px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.7;
+    word-break: break-word;
+}
+.msg-user .msg-body {
+    background: var(--primary);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+.msg-ai .msg-body {
+    background: #fff;
+    box-shadow: var(--shadow);
+    border-bottom-left-radius: 4px;
+}
+.typing-cursor { animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* AI 推荐卡片 */
+.recommend-card {
+    background: #fff8f2;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-top: 10px;
+}
+.rc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rc-name { font-weight: 700; font-size: 14px; }
+.rc-price { font-size: 12px; color: var(--primary-dark); background: #ffe8d9; border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
+.rc-meta { font-size: 12px; color: var(--text-light); margin-top: 3px; }
+.rc-reason { font-size: 13px; margin-top: 4px; }
+.rc-save { margin-top: 8px; }
+.rc-save.saved { background: #f0e6dc; color: var(--text-light); }
+.rc-hint { font-size: 11px; color: var(--text-light); margin-top: 8px; }
+
+/* 输入栏 */
+.chat-input-bar { display: flex; gap: 8px; padding-top: 8px; }
+.chat-input-bar input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 10px 16px;
+    font-size: 15px;
+    outline: none;
+    background: #fff;
+    color: var(--text);
+}
+.chat-input-bar input:focus { border-color: var(--primary); }
+
+/* 待尝清单 */
+.wish-section-title { font-size: 14px; color: var(--text-light); margin: 4px 2px 10px; }
+.wish-item.eaten { opacity: .65; }
+.wish-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.wish-name { font-weight: 700; font-size: 15px; }
+.wish-price { font-size: 13px; color: var(--primary-dark); white-space: nowrap; }
+.wish-meta { font-size: 12px; color: var(--text-light); margin: 2px 0 4px; }
+.wish-reason { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+.wish-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* AI 卡片校验状态 */
+.rc-addr { font-size: 12px; color: #888; margin-top: 4px; }
+.rc-status { margin-top: 6px; }
+.rc-ok { display: inline-block; font-size: 12px; color: #2e7d32; background: #e8f5e9; border-radius: 10px; padding: 2px 10px; }
+.rc-warn { display: inline-block; font-size: 12px; color: #b26a00; background: #fff8e1; border-radius: 10px; padding: 2px 10px; }
+/* 区页真实餐厅 */
+.resto-rating { font-size: 12px; color: #e85d2a; margin-left: 6px; }
+.form-help { font-size: 12px; color: #999; margin-top: 4px; }
+
+/* 用餐照片：表单缩略图与详情页相册 */
+.photo-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.photo-thumbs img {
+    width: 72px; height: 72px; object-fit: cover;
+    border-radius: 10px; border: 1px solid var(--border);
+}
+.photo-thumb { position: relative; }
+.thumb-del {
+    position: absolute; top: -6px; right: -6px;
+    width: 20px; height: 20px; line-height: 1;
+    border: none; border-radius: 50%;
+    background: #e53935; color: #fff;
+    font-size: 12px; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+.thumb-del:hover { background: #c62828; }
+.photo-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.photo-album img {
+    width: 100%; aspect-ratio: 1; object-fit: cover;
+    border-radius: 12px; border: 1px solid var(--border);
+    cursor: zoom-in;
+}
+.photo-album img:hover { opacity: .85; }
+/* 点击看大图的遮罩层 */
+.photo-viewer {
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(0, 0, 0, .85);
+    display: none; align-items: center; justify-content: center;
+}
+.photo-viewer.open { display: flex; }
+.photo-viewer img {
+    max-width: 92vw; max-height: 88vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .5);
+}
+.photo-viewer .viewer-close {
+    position: absolute; top: 16px; right: 20px;
+    color: #fff; font-size: 30px; cursor: pointer; line-height: 1;
+}

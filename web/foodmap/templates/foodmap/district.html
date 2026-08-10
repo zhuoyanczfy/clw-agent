@@ -1,0 +1,87 @@
+{% extends 'foodmap/base.html' %}
+
+{% block title %}{{ district.name }} · 南京美食足迹{% endblock %}
+
+{% block nav_home %}active{% endblock %}
+
+{% block topbar %}
+    <a href="{% url 'foodmap:index' %}" class="btn-back">← 地图</a>
+    <span class="brand">{{ district.name }}</span>
+    <a href="{% url 'foodmap:record_new' %}?district={{ district.pk }}" class="btn-back">＋ 记录</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">
+    {{ district.name }}
+    <div class="sub">真实餐厅 {{ restaurant_count }} 家 · 去过 {{ visited|length }} 家</div>
+</div>
+
+<div class="form-group" style="margin-bottom: 12px">
+    <input type="text" id="resto-search" placeholder="🔍 搜索本区真实餐厅…" autocomplete="off">
+</div>
+
+<div id="resto-list">
+    {% for r in visited %}
+        <a class="card card-link resto-card" href="{% url 'foodmap:restaurant_detail' r.pk %}">
+            <div class="resto-name">{{ r.name }}
+                {% if r.rating %}<span class="resto-rating">⭐ {{ r.rating }}</span>{% endif %}
+            </div>
+            <div class="resto-meta">
+                去过 {{ r.rec_count }} 次{% if r.latest_record %} · 最近 {{ r.latest_record.date|date:"Y年m月d日" }}{% endif %}
+            </div>
+            {% if r.latest_record.comment %}
+                <div class="resto-note">“{{ r.latest_record.comment|truncatechars:60 }}”</div>
+            {% endif %}
+        </a>
+    {% empty %}
+        <div class="empty">
+            <span class="empty-icon">🍽️</span>
+            这个区还没有足迹，
+            <a href="{% url 'foodmap:record_new' %}?district={{ district.pk }}" style="color:#e85d2a">留下第一条记录吧</a>
+            （或用上方搜索框浏览本区真实餐厅）
+        </div>
+    {% endfor %}
+</div>
+
+<div class="empty" id="search-empty" style="display:none">
+    <span class="empty-icon">🔍</span>
+    没有找到匹配的餐厅，换个关键词试试
+</div>
+{% endblock %}
+
+{% block extra_script %}
+{{ restaurants_json|json_script:"restos-data" }}
+<script>
+(function () {
+    const all = JSON.parse(document.getElementById('restos-data').textContent);
+    const listEl = document.getElementById('resto-list');
+    const searchEl = document.getElementById('resto-search');
+    const emptyEl = document.getElementById('search-empty');
+
+    function cardHtml(r) {
+        const meta = r.visited
+            ? `去过 ${r.rec_count} 次`
+            : (r.rating ? `⭐ ${r.rating}` : '还没去过');
+        return `<a class="card card-link resto-card" href="/restaurant/${r.id}/">
+            <div class="resto-name">${escapeHtml(r.name)}${r.rating ? `<span class="resto-rating">⭐ ${r.rating}</span>` : ''}</div>
+            <div class="resto-meta">${meta}</div>
+            ${r.address ? `<div class="resto-note">📍 ${escapeHtml(r.address)}</div>` : ''}
+        </a>`;
+    }
+
+    function escapeHtml(t) {
+        return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    searchEl.addEventListener('input', () => {
+        const kw = searchEl.value.trim().toLowerCase();
+        const hits = kw
+            ? all.filter(r => (r.name + r.address).toLowerCase().includes(kw)).slice(0, 50)
+            : null;
+        emptyEl.style.display = hits !== null && hits.length === 0 ? 'block' : 'none';
+        if (hits === null) return;  // 未搜索时保留服务端渲染的足迹列表
+        listEl.innerHTML = hits.map(cardHtml).join('');
+    });
+})();
+</script>
+{% endblock %}

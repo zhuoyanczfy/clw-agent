@@ -1,0 +1,71 @@
+{% extends 'foodmap/base.html' %}
+
+{% block title %}用餐记录 · 南京美食足迹{% endblock %}
+
+{% block nav_home %}active{% endblock %}
+
+{% block topbar %}
+    <a href="{% url 'foodmap:restaurant_detail' record.restaurant.pk %}" class="btn-back">← {{ record.restaurant.name }}</a>
+    <span class="brand">📖 回忆</span>
+    <span style="width:52px"></span>
+{% endblock %}
+
+{% block content %}
+<div class="card record-hero">
+    <a href="{% url 'foodmap:restaurant_detail' record.restaurant.pk %}" style="color:var(--primary-dark); font-size:14px">
+        {{ record.restaurant.district.name }} · {{ record.restaurant.name }}
+    </a>
+    <div style="font-size:22px; font-weight:700; margin:6px 0 8px">{{ record.date|date:"Y年m月d日" }}</div>
+    <div class="stars">{% for i in "12345" %}{% if forloop.counter <= record.rating %}★{% else %}<span class="dim">★</span>{% endif %}{% endfor %}</div>
+    {% if record.mood %}<span class="mood">✨ {{ record.mood }}</span>{% endif %}
+    <div class="record-meta-row">
+        {% if record.per_capita %}<span>人均 ¥{{ record.per_capita }}</span>{% endif %}
+        <span>更新于 {{ record.updated_at|date:"Y-m-d H:i" }}</span>
+    </div>
+</div>
+
+{% if record.comment %}
+    <div class="card">
+        <div class="record-comment">{{ record.comment|linebreaksbr }}</div>
+    </div>
+{% endif %}
+
+{% with photos=record.photos.all %}
+{% if photos %}
+    <div class="card">
+        <div style="font-size:13px; color:var(--text-light); margin-bottom:8px">📷 照片 · {{ photos|length }} 张</div>
+        <div class="photo-album" id="photo-album">
+            {% for p in photos %}
+                <img src="{{ p.image.url }}" alt="照片{{ forloop.counter }}" loading="lazy" data-src="{{ p.image.url }}">
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+{% endwith %}
+
+<div class="record-actions">
+    <a class="btn" href="{% url 'foodmap:record_edit' record.pk %}">✏️ 编辑</a>
+    <form method="post" action="{% url 'foodmap:record_delete' record.pk %}"
+          onsubmit="return confirm('确定删除这条用餐记录吗？');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">🗑️ 删除</button>
+    </form>
+</div>
+
+<!-- 点击照片看大图 -->
+<div class="photo-viewer" id="photo-viewer" onclick="this.classList.remove('open')">
+    <span class="viewer-close">✕</span>
+    <img id="viewer-img" alt="查看大图">
+</div>
+<script>
+    const album = document.getElementById('photo-album');
+    if (album) {
+        album.addEventListener('click', e => {
+            const img = e.target.closest('img');
+            if (!img) return;
+            document.getElementById('viewer-img').src = img.dataset.src;
+            document.getElementById('photo-viewer').classList.add('open');
+        });
+    }
+</script>
+{% endblock %}

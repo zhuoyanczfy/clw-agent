@@ -1,14 +1,11 @@
-# 专属美食关怀 APP
+# 专属美食关怀（clw-agent）
 
-为她定制的安卓 APP：每天推送一道美食推荐 + 定时提醒喝水、吃美食、早点睡。
-首页显示她的昵称、你们认识的天数、专属欢迎语——一眼就能看出是专门为她做的。
+为她定制的一套美食系礼物：
 
-## 功能一览
+- **📱 安卓 APP**（`app/`）：每天推送一道美食推荐 + 定时提醒喝水、吃美食、早点睡，首页显示她的昵称、认识天数与专属欢迎语
+- **🍜 美食足迹 Web**（`web/`）：南京分区美食地图，记录一起吃过的餐厅、点评与心情，附 AI 美食推荐官（DeepSeek），可跨平台浏览器访问
 
-- 首页：专属问候（昵称 + 认识天数 + 今日美食卡片）
-- 美食：每日一道美食推荐（40 道菜全菜系，含专属文案和做法），可收藏想吃的菜
-- 提醒：喝水提醒（默认 10:00 / 14:00 / 17:00）、美食推荐提醒（默认 12:00）、晚安提醒（默认 22:30），全部可自定义时间和开关
-- 提醒为系统级定时通知：关闭 APP 也能收到，手机重启后自动恢复
+两者数据独立、各自可独立运行，共用本仓库统一迭代。
 
 ## 目录结构
 
@@ -25,8 +22,16 @@ clw_agent/
 │   ├── main.py              # API：/api/dish/today 每日推荐
 │   ├── dishes.py            # 美食库数据（与 APP 内置一致）
 │   └── requirements.txt
+├── web/                     # 南京美食足迹 Django Web（独立项目，详见 web/README.md）
+│   ├── config/              # Django 配置 + config.ini（API Key，勿提交）
+│   ├── foodmap/             # 业务：地图 / 用餐记录 / AI 推荐官
+│   └── deploy/              # 生产部署脚本（Nginx + Gunicorn）
 └── README.md
 ```
+
+---
+
+## 📱 一、安卓 APP（专属美食关怀）
 
 ## 送给她之前：修改专属信息（只需 1 个文件）
 
@@ -89,3 +94,21 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 - 只改后端：编辑 `server/dishes.py` 添加新菜，重启服务即可，APP 无需重装
 - 改 APP 内置库：编辑 `server/dishes.py` 后运行 `python server/gen_dishes_dart.py` 重新生成 `app/lib/data/dishes.dart`，再重新打包
+
+---
+
+## 🍜 二、南京美食足迹 Web（Django）
+
+完整功能与开发文档见 [`web/README.md`](web/README.md)，快速启动：
+
+```powershell
+cd D:\code\clw_agent\web
+py -3.10 -m venv .venv          # 首次
+.\.venv\Scripts\activate
+pip install -r requirements.txt  # 首次
+python manage.py runserver       # 访问 http://127.0.0.1:8000
+```
+
+- 本机已有 `db.sqlite3`（含历史用餐回忆数据），`migrate` 后直接可用
+- API Key 配置在 `web/config/config.ini`（DeepSeek / 高德），**该文件不入库**，模板见 `config.ini.example`
+- 局域网分享：`python manage.py runserver 0.0.0.0:8000`，她手机浏览器直接访问

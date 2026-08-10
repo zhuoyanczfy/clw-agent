@@ -1,0 +1,6 @@
+﻿Django==4.2.*
+Pillow==12.*
+gunicorn==23.*
+PyMySQL==1.*
+requests==2.*
+PyYAML==6.*   # agent.md 解析（旧环境遗漏，已补）

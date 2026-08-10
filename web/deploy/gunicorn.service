@@ -1,0 +1,25 @@
+# Gunicorn systemd 服务（模板）
+# 用法：复制到 /etc/systemd/system/foodmap.service，然后：
+#   systemctl daemon-reload && systemctl enable --now foodmap
+
+[Unit]
+Description=Gunicorn server for foodmap (南京美食足迹)
+After=network.target mysql.service
+
+[Service]
+User=foodmap
+Group=foodmap
+WorkingDirectory=/opt/foodmap/app
+Environment=PYTHONIOENCODING=utf-8
+# 4 个 worker 适合 2C2G 轻量服务器；--timeout 120 给 DeepSeek 流式响应留足时间
+ExecStart=/opt/foodmap/venv/bin/gunicorn config.wsgi:application \
+    --workers 4 \
+    --bind 127.0.0.1:8000 \
+    --timeout 120 \
+    --access-logfile /opt/foodmap/logs/access.log \
+    --error-logfile /opt/foodmap/logs/error.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

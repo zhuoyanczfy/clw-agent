@@ -1,0 +1,217 @@
+{% extends 'foodmap/base.html' %}
+
+{% block title %}{% if record %}编辑记录{% else %}新纪录{% endif %} · 南京美食足迹{% endblock %}
+
+{% block nav_add %}active{% endblock %}
+
+{% block topbar %}
+    <a href="javascript:history.back()" class="btn-back">← 返回</a>
+    <span class="brand">{% if record %}✏️ 编辑记录{% else %}🍽️ 记录一次用餐{% endif %}</span>
+    <span style="width:52px"></span>
+{% endblock %}
+
+{% block content %}
+<form method="post" novalidate enctype="multipart/form-data">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+        <div class="form-errors">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="card">
+        <div class="form-group" {% if record %}style="display:none"{% endif %}>
+            <label for="{{ form.district.id_for_label }}">{{ form.district.label }}</label>
+            {{ form.district }}
+            {% if form.district.errors %}<div class="form-errors">{{ form.district.errors }}</div>{% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.restaurant.id_for_label }}">{{ form.restaurant.label }}</label>
+            <input type="text" id="{{ form.restaurant.id_for_label }}" name="restaurant" list="resto-list"
+                   placeholder="输入餐厅名搜索…" autocomplete="off" required
+                   value="{{ selected_name }}">
+            <datalist id="resto-list"></datalist>
+            {% if form.restaurant.errors %}<div class="form-errors">{{ form.restaurant.errors }}</div>{% endif %}
+            <div class="form-help">输入名称搜索真实餐厅；没找到可留空并选择「新建餐厅」手动填写</div>
+        </div>
+
+        <div id="new-restaurant-fields">
+            <div class="form-group">
+                <label for="{{ form.new_name.id_for_label }}">{{ form.new_name.label }}</label>
+                {{ form.new_name }}
+                {% if form.new_name.errors %}<div class="form-errors">{{ form.new_name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.new_address.id_for_label }}">{{ form.new_address.label }}</label>
+                {{ form.new_address }}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>评分</label>
+            <div class="rating-stars" id="rating-stars">
+                {% for value, label in form.rating.field.choices reversed %}
+                    <input type="radio" name="rating" value="{{ value }}" id="id_rating_{{ value }}"
+                           {% if form.rating.value|stringformat:'s' == value|stringformat:'s' %}checked{% endif %}>
+                    <label for="id_rating_{{ value }}">★</label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+            {{ form.date }}
+            {% if form.date.errors %}<div class="form-errors">{{ form.date.errors }}</div>{% endif %}
+        </div>
+
+        <div style="display:flex; gap:12px">
+            <div class="form-group" style="flex:1">
+                <label for="{{ form.per_capita.id_for_label }}">{{ form.per_capita.label }}</label>
+                {{ form.per_capita }}
+            </div>
+            <div class="form-group" style="flex:1">
+                <label for="{{ form.mood.id_for_label }}">{{ form.mood.label }}</label>
+                {{ form.mood }}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+            {{ form.comment }}
+        </div>
+
+        <div class="form-group">
+            <label>照片（可多选）</label>
+            <input type="file" name="photos" id="id_photos" multiple accept="image/*">
+            <div class="form-help">支持一次选择多张照片，jpg / png / gif 等常见格式</div>
+            {% if existing_photos %}
+                <div class="photo-thumbs" id="photo-thumbs">
+                    {% for p in existing_photos %}
+                        <div class="photo-thumb">
+                            <img src="{{ p.image.url }}" alt="照片{{ forloop.counter }}" loading="lazy">
+                            <button type="button" class="thumb-del" data-photo-id="{{ p.pk }}" title="删除这张照片">✕</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="photo-thumbs" id="photo-preview"></div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-block">保存回忆</button>
+</form>
+{% endblock %}
+
+{% block extra_script %}
+{{ restaurants_json|json_script:"restos-data" }}
+<script>
+(function () {
+    const districtSel = document.getElementById('{{ form.district.id_for_label }}');
+    const restoInput = document.getElementById('{{ form.restaurant.id_for_label }}');
+    const datalist = document.getElementById('resto-list');
+    const newFields = document.getElementById('new-restaurant-fields');
+    const newNameInput = document.getElementById('{{ form.new_name.id_for_label }}');
+    // 全部真实餐厅数据源（来自服务端 JSON）：{name, pk, district}
+    const allOptions = JSON.parse(document.getElementById('restos-data').textContent)
+        .map(r => ({name: r.name, pk: String(r.id), district: String(r.district_id || '')}));
+
+    // 按区重建 datalist（datalist 的 option 不支持 hidden，只能重建）
+    function rebuildDatalist() {
+        const districtId = districtSel ? districtSel.value : '';
+        datalist.innerHTML = '<option value="" label="✨ 新建餐厅（手动填写下方名称）"></option>' +
+            allOptions
+                .filter(o => !districtId || o.district === districtId)
+                .map(o => `<option value="${escapeAttr(o.name)}" data-pk="${o.pk}" data-district="${o.district}"></option>`)
+                .join('');
+    }
+
+    function escapeAttr(t) {
+        return t.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    // 输入值非空且匹配某家餐厅时返回 pk，否则返回 ''（=新建）
+    function matchedPk() {
+        const v = restoInput.value.trim();
+        if (!v) return '';
+        const hit = allOptions.find(o => o.name === v);
+        return hit ? hit.pk : null;  // null=输入了不存在的名称
+    }
+
+    function toggleNewFields() {
+        const pk = matchedPk();
+        newFields.style.display = (pk === '' || pk === null) ? 'block' : 'none';
+    }
+
+    if (districtSel) {
+        districtSel.addEventListener('change', () => { rebuildDatalist(); toggleNewFields(); });
+    }
+    restoInput.addEventListener('input', toggleNewFields);
+    restoInput.addEventListener('change', toggleNewFields);
+
+    // 提交时：输入了不存在于列表的名称 → 自动转为“新建餐厅”
+    const form = restoInput.closest('form');
+    form.addEventListener('submit', e => {
+        const pk = matchedPk();
+        if (pk === null) {
+            e.preventDefault();
+            newNameInput.value = restoInput.value.trim();
+            restoInput.value = '';
+            toggleNewFields();
+            newNameInput.focus();
+            return;
+        }
+        if (pk === '') return;  // 明确选择“新建餐厅”
+        restoInput.value = pk;  // 提交餐厅 id
+    });
+
+    rebuildDatalist();
+    toggleNewFields();
+
+    // 星星评分同步
+    const labels = document.querySelectorAll('#rating-stars label');
+    function syncStars() {
+        const checked = document.querySelector('input[name="rating"]:checked');
+        const v = checked ? +checked.value : 0;
+        labels.forEach(l => {
+            const val = +l.getAttribute('for').replace('id_rating_', '');
+            l.classList.toggle('active', val <= v);
+        });
+    }
+    document.querySelectorAll('input[name="rating"]').forEach(r => r.addEventListener('change', syncStars));
+    syncStars();
+
+    // 照片本地预览（选择后立即显示缩略图，不经过服务器）
+    const photoInput = document.getElementById('id_photos');
+    const previewBox = document.getElementById('photo-preview');
+    if (photoInput && previewBox) {
+        photoInput.addEventListener('change', () => {
+            previewBox.innerHTML = '';
+            for (const file of photoInput.files) {
+                if (!file.type.startsWith('image/')) continue;
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = file.name;
+                previewBox.appendChild(img);
+            }
+        });
+    }
+
+    // 编辑时删除已有照片（AJAX 即时删除，成功后移除缩略图）
+    const thumbsBox = document.getElementById('photo-thumbs');
+    if (thumbsBox) {
+        thumbsBox.addEventListener('click', e => {
+            const btn = e.target.closest('.thumb-del');
+            if (!btn) return;
+            if (!confirm('确定删除这张照片吗？')) return;
+            const csrf = document.querySelector('input[name="csrfmiddlewaretoken"]').value;
+            fetch(`/record/photo/${btn.dataset.photoId}/delete/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'},
+            }).then(r => r.json()).then(d => {
+                if (d.ok) btn.closest('.photo-thumb').remove();
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}
