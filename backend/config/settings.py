@@ -151,6 +151,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # 生产 collectstatic 产物（Nginx 直接服务）
 
 # 用户上传的用餐照片（多图）
 MEDIA_URL = '/media/'

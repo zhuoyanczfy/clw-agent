@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DiningRecord, District, Restaurant, SplashImage, Story, WishlistItem
+from .models import AppConfig, DiningRecord, District, Restaurant, SplashImage, Story, WishlistItem
 
 
 @admin.register(District)
@@ -37,6 +37,15 @@ class WishlistItemAdmin(admin.ModelAdmin):
     list_display = ('name', 'district', 'status', 'source', 'per_capita', 'created_at')
     list_filter = ('status', 'source')
     search_fields = ('name', 'reason')
+
+
+@admin.register(AppConfig)
+class AppConfigAdmin(admin.ModelAdmin):
+    """APP 云端配置（改完 APP 下次启动自动生效，无需重打包）。"""
+
+    list_display = ('key', 'value', 'description')
+    search_fields = ('key', 'description')
+    ordering = ['id']
 
 
 @admin.register(SplashImage)

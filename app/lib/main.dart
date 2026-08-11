@@ -7,13 +7,13 @@ import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/splash_page.dart';
 import 'services/notification_service.dart';
+import 'services/remote_config.dart';
 import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 初始化通知插件与权限，并调度每日提醒
+  // 初始化通知插件与权限（每日提醒在 _Root 拉到云端配置后再调度）
   await NotificationService.init();
-  await NotificationService.scheduleAll();
   runApp(const GiftingApp());
 }
 
@@ -46,6 +46,18 @@ class _RootState extends State<_Root> {
   bool _splashDone = false;
 
   @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
+
+  /// 启动时拉取云端配置并按配置调度每日提醒（容错，失败用本地默认值）
+  Future<void> _bootstrap() async {
+    await RemoteConfig.load();
+    await NotificationService.scheduleAll();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (!_splashDone) {
       return SplashPage(onFinished: () => setState(() => _splashDone = true));
@@ -71,9 +83,7 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomePage(
-            onOpenSettings: () => setState(() => _index = 4),
-          ),
+          const HomePage(),
           const FoodPage(),
           const FootprintPage(),
           const AiRecommendPage(),

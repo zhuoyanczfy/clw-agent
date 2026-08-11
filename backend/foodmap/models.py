@@ -46,6 +46,22 @@ class Restaurant(models.Model):
         return self.records.order_by('-date').first()
 
 
+class AppConfig(models.Model):
+    """APP 云端配置：键值对，Admin 修改后 APP 启动自动拉取生效（无需重打包）。"""
+
+    key = models.CharField('配置键', max_length=50, unique=True)
+    value = models.CharField('配置值', max_length=1000, blank=True, default='')
+    description = models.CharField('说明', max_length=200, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'APP配置'
+        verbose_name_plural = 'APP配置'
+        ordering = ['id']
+
+    def __str__(self):
+        return f'{self.key} = {self.value}'
+
+
 class SplashImage(models.Model):
     """APP 启动加载页图片：每天随机展示一张，相邻两天不重复（由 SplashState 记录）。"""
 

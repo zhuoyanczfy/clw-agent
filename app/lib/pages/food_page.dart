@@ -2,10 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/app_config.dart';
 import '../data/dishes.dart';
 import '../models/dish.dart';
 import '../services/dish_service.dart';
+import '../services/remote_config.dart';
 import '../theme.dart';
 import 'dish_page.dart';
 
@@ -82,7 +82,7 @@ class _FoodPageState extends State<FoodPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                '${AppConfig.dailyDishTitle}一道好菜，每天都有小惊喜',
+                '${RemoteConfig.dailyDishTitle}一道好菜，每天都有小惊喜',
                 style: const TextStyle(fontSize: 13, color: AppTheme.textLight),
               ),
               const SizedBox(height: 16),
@@ -178,7 +178,7 @@ class _FoodPageState extends State<FoodPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    AppConfig.dailyDishTitle,
+                    RemoteConfig.dailyDishTitle,
                     style: const TextStyle(
                         fontSize: 13, color: AppTheme.primaryDark),
                   ),

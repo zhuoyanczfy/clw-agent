@@ -14,6 +14,7 @@
 - **故事书**：`/api/stories/` 系列接口提供历史小故事（分类/列表/详情/随机），上传支持 JSON 与 multipart（封面图），Admin 可直接管理
 - **真实餐厅数据**：一键从高德导入南京全部真实餐饮 POI（名称/地址/坐标/评分），AI 推荐直接关联数据库真实餐厅（按高德 POI ID），未关联的卡片才走高德在线校验兜底
 - **Django Admin 后台**：随时补录/管理数据
+- **APP 云端配置**：`/api/config/` 下发首页文案（昵称/欢迎语/认识日期/今日美食标题）与提醒配置（喝水/晚安/美食推荐的文案、时间、开关），Django Admin 的「APP配置」改一条即生效，APP 启动自动拉取，无需重新打包
 
 ## 技术栈
 
@@ -71,9 +72,9 @@ python manage.py runserver 0.0.0.0:8000
 ├── requirements.txt
 ├── config/                  # Django 项目配置 + config.ini（API Key 等自定义配置）
 ├── foodmap/                 # 业务应用（纯 REST API）
-│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单 / 加载页 / 故事
+│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单 / 加载页 / 故事 / APP配置
 │   ├── views.py             # 全部 API 视图（JsonResponse + SSE 流式聊天）
-│   ├── urls.py              # 23 个 /api/ 路由（见根 README 主要 API 表）
+│   ├── urls.py              # 24 个 /api/ 路由（见根 README 主要 API 表）
 │   ├── dishes_data.py       # 40 道美食库（每日推荐数据源，与 APP 内置一致）
 │   ├── agents/recommender/agent.md   # 推荐官定义（frontmatter + Goal/Backstory/Task Template/Expected Output）
 │   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）

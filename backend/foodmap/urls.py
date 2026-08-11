@@ -27,6 +27,8 @@ urlpatterns = [
     # AI 智能推荐
     path('api/recommend/chat/', views.api_chat, name='recommend_chat'),
     path('api/recommend/verify/', views.api_recommend_verify, name='recommend_verify'),
+    # APP 云端配置
+    path('api/config/', views.api_config, name='config'),
     # 加载页图片
     path('api/splash/', views.api_splash, name='splash'),
     path('api/splash/upload/', views.api_splash_upload, name='splash_upload'),

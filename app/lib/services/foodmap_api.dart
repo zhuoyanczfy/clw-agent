@@ -222,6 +222,15 @@ class FoodmapApi {
     return '$base$path';
   }
 
+  // ---------- APP 云端配置 ----------
+
+  /// 拉取云端配置（键值对），失败时抛异常由调用方容错
+  static Future<Map<String, String>> fetchConfig() async {
+    final json = await _getJson('/api/config/') as Map<String, dynamic>;
+    final raw = json['config'] as Map<String, dynamic>;
+    return raw.map((k, v) => MapEntry(k, v?.toString() ?? ''));
+  }
+
   // ---------- 加载页 ----------
 
   /// 当日加载页图片（后端保证同一天固定一张、相邻两天不重复）

@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from .dishes_data import DISHES, dish_for_date
 from .models import (
+    AppConfig,
     DiningRecord,
     DiningRecordPhoto,
     District,
@@ -519,6 +520,41 @@ def api_chat(request):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+# ============ APP 云端配置 ============
+
+# 配置默认值：Admin 添加同名 AppConfig 条目即覆盖（APP 启动自动拉取，无需重打包）
+APP_CONFIG_DEFAULTS = {
+    # 专属信息
+    'her_name': '小仙女',
+    'meet_date': '2026-01-01',
+    'greeting': '今天也要好好吃饭呀',
+    'daily_dish_title': '今天想带你吃',
+    # 通知文案（{herName} / {dishName} 会被替换）
+    'water_title': '亲爱的，该喝水啦～',
+    'water_body': '喝一口温水，今天也要水润润的 {herName}',
+    'night_title': '夜深了，早点休息',
+    'night_body': '晚安，好梦。明天见，{herName}',
+    'dish_title': '今日美食推荐',
+    'dish_body': '今天想带你吃「{dishName}」，点开看看',
+    # 通知默认时间
+    'water_times': '10:00,14:00,17:00',
+    'night_time': '22:30',
+    'dish_time': '12:00',
+    # 通知开关（1 开 / 0 关）
+    'water_enabled': '1',
+    'night_enabled': '1',
+    'dish_enabled': '1',
+}
+
+
+def api_config(request):
+    """APP 云端配置：后端默认值 + Admin 覆盖值合并返回。"""
+    overrides = dict(AppConfig.objects.values_list('key', 'value'))
+    config = dict(APP_CONFIG_DEFAULTS)
+    config.update(overrides)
+    return JsonResponse({'config': config})
 
 
 # ============ 加载页图片 ============

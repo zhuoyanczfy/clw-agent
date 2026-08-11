@@ -1,20 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../config/app_config.dart';
 import '../models/dish.dart';
 import '../services/dish_service.dart';
-import '../services/notification_service.dart';
+import '../services/remote_config.dart';
 import '../theme.dart';
 import 'dish_page.dart';
 import 'story_book_page.dart';
 
-/// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态
+/// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态（文案由后台配置）
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.onOpenSettings});
-
-  /// 点击「每日关怀提醒」卡片时回调（由主界面切换到设置 Tab）
-  final VoidCallback? onOpenSettings;
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -22,7 +18,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   Dish? _todayDish;
-  ReminderSettings? _settings;
 
   @override
   void initState() {
@@ -32,12 +27,8 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _load() async {
     final dish = await DishService.getTodayDish();
-    final settings = await NotificationService.loadSettings();
     if (!mounted) return;
-    setState(() {
-      _todayDish = dish;
-      _settings = settings;
-    });
+    setState(() => _todayDish = dish);
   }
 
   @override
@@ -93,7 +84,7 @@ class _HomePageState extends State<HomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$greeting，${AppConfig.herName}',
+                '$greeting，${RemoteConfig.herName}',
                 style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -102,7 +93,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${AppConfig.greeting} · $dateStr',
+                '${RemoteConfig.greeting} · $dateStr',
                 style: const TextStyle(fontSize: 14, color: AppTheme.textLight),
               ),
             ],
@@ -115,7 +106,7 @@ class _HomePageState extends State<HomePage> {
 
   // ---- 认识天数卡片 ----
   Widget _buildDaysCard() {
-    final meet = DateTime.tryParse(AppConfig.meetDate) ?? DateTime.now();
+    final meet = DateTime.tryParse(RemoteConfig.meetDate) ?? DateTime.now();
     final days = DateTime.now().difference(meet).inDays + 1;
     return Container(
       width: double.infinity,
@@ -141,7 +132,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '从 ${AppConfig.meetDate} 认识你，每一天都值得纪念',
+            '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
             style: const TextStyle(fontSize: 13, color: Color(0xFFFFF1F1)),
           ),
           const SizedBox(height: 16),
@@ -278,7 +269,7 @@ class _HomePageState extends State<HomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppConfig.dailyDishTitle,
+                          RemoteConfig.dailyDishTitle,
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppTheme.primaryDark,
@@ -310,16 +301,20 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---- 提醒状态卡片 ----
+  // ---- 提醒状态卡片（状态由后台配置） ----
   Widget _buildReminderCard() {
-    final s = _settings;
-    final waterOn = s?.waterEnabled ?? true;
-    final nightOn = s?.nightEnabled ?? true;
-    final dishOn = s?.dishEnabled ?? true;
+    final waterOn = RemoteConfig.waterEnabled;
+    final nightOn = RemoteConfig.nightEnabled;
+    final dishOn = RemoteConfig.dishEnabled;
     final onCount = [waterOn, nightOn, dishOn].where((b) => b).length;
     return Card(
       child: InkWell(
-        onTap: widget.onOpenSettings,
+        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('每日提醒由后台统一配置，无需在手机端设置'),
+            duration: Duration(seconds: 2),
+          ),
+        ),
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(16),

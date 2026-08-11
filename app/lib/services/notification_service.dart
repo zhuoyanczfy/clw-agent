@@ -1,70 +1,14 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
-import '../config/app_config.dart';
 import 'dish_service.dart';
-
-/// 提醒设置（与 shared_preferences 持久化对应）
-class ReminderSettings {
-  final bool waterEnabled;
-  final List<TimeOfDayLike> waterTimes; // 喝水提醒时间点（最多 3 个）
-  final bool nightEnabled;
-  final TimeOfDayLike nightTime; // 晚安提醒
-  final bool dishEnabled;
-  final TimeOfDayLike dishTime; // 每日美食推荐提醒
-
-  const ReminderSettings({
-    this.waterEnabled = true,
-    this.waterTimes = const [],
-    this.nightEnabled = true,
-    this.nightTime = const TimeOfDayLike(hour: 22, minute: 30),
-    this.dishEnabled = true,
-    this.dishTime = const TimeOfDayLike(hour: 12, minute: 0),
-  });
-
-  ReminderSettings copyWith({
-    bool? waterEnabled,
-    List<TimeOfDayLike>? waterTimes,
-    bool? nightEnabled,
-    TimeOfDayLike? nightTime,
-    bool? dishEnabled,
-    TimeOfDayLike? dishTime,
-  }) {
-    return ReminderSettings(
-      waterEnabled: waterEnabled ?? this.waterEnabled,
-      waterTimes: waterTimes ?? this.waterTimes,
-      nightEnabled: nightEnabled ?? this.nightEnabled,
-      nightTime: nightTime ?? this.nightTime,
-      dishEnabled: dishEnabled ?? this.dishEnabled,
-      dishTime: dishTime ?? this.dishTime,
-    );
-  }
-}
-
-/// 简单的时间描述（避免依赖 intl 的 TimeOfDay 序列化）
-class TimeOfDayLike {
-  final int hour;
-  final int minute;
-  const TimeOfDayLike({required this.hour, required this.minute});
-
-  String get label => '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-
-  String encode() => '$hour:$minute';
-
-  static TimeOfDayLike decode(String s) {
-    final parts = s.split(':');
-    return TimeOfDayLike(
-      hour: int.tryParse(parts[0]) ?? 12,
-      minute: int.tryParse(parts[1]) ?? 0,
-    );
-  }
-}
+import 'remote_config.dart';
 
 /// 定时通知服务：每天定时推送喝水、晚安、美食推荐提醒。
 /// 使用 flutter_local_notifications 的原生定时调度，
 /// 关闭 APP 也能收到通知（Android 系统级调度）。
+/// 文案 / 时间 / 开关全部由后台配置（RemoteConfig），APP 内不可手动修改。
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -91,48 +35,47 @@ class NotificationService {
     await android?.requestExactAlarmsPermission();
   }
 
-  /// 按当前设置调度所有提醒（先取消旧的，再重新排）
+  /// 按云端配置调度所有提醒（先取消旧的，再重新排）
   static Future<void> scheduleAll() async {
-    final settings = await loadSettings();
     await _plugin.cancelAll();
 
-    if (settings.waterEnabled) {
-      for (var i = 0; i < settings.waterTimes.length; i++) {
-        final t = settings.waterTimes[i];
+    if (RemoteConfig.waterEnabled) {
+      for (var i = 0; i < RemoteConfig.waterTimes.length; i++) {
+        final t = RemoteConfig.waterTimes[i];
         await _scheduleDaily(
           id: _waterBaseId + i,
-          title: '亲爱的，该喝水啦～',
-          body: '喝一口温水，今天也要水润润的 ${AppConfig.herName}',
+          title: RemoteConfig.waterTitle,
+          body: RemoteConfig.format(RemoteConfig.waterBody),
           hour: t.hour,
           minute: t.minute,
         );
       }
     }
 
-    if (settings.nightEnabled) {
+    if (RemoteConfig.nightEnabled) {
       await _scheduleDaily(
         id: _nightId,
-        title: '夜深了，早点休息',
-        body: '晚安，好梦。明天见，${AppConfig.herName}',
-        hour: settings.nightTime.hour,
-        minute: settings.nightTime.minute,
+        title: RemoteConfig.nightTitle,
+        body: RemoteConfig.format(RemoteConfig.nightBody),
+        hour: RemoteConfig.nightTime.hour,
+        minute: RemoteConfig.nightTime.minute,
       );
     }
 
-    if (settings.dishEnabled) {
-      String body = '点开看看今天想带你吃什么';
+    if (RemoteConfig.dishEnabled) {
+      String body = RemoteConfig.format(RemoteConfig.dishBody);
       try {
         final dish = await DishService.getTodayDish();
-        body = '今天想带你吃「${dish.name}」，点开看看';
+        body = RemoteConfig.format(RemoteConfig.dishBody, dishName: dish.name);
       } catch (_) {
         // 文案用默认即可
       }
       await _scheduleDaily(
         id: _dishId,
-        title: '今日美食推荐',
+        title: RemoteConfig.dishTitle,
         body: body,
-        hour: settings.dishTime.hour,
-        minute: settings.dishTime.minute,
+        hour: RemoteConfig.dishTime.hour,
+        minute: RemoteConfig.dishTime.minute,
       );
     }
   }
@@ -167,51 +110,5 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time, // 每天重复
     );
-  }
-
-  // ---------- 设置持久化 ----------
-
-  static const _kWaterEnabled = 'water_enabled';
-  static const _kWaterTimes = 'water_times';
-  static const _kNightEnabled = 'night_enabled';
-  static const _kNightTime = 'night_time';
-  static const _kDishEnabled = 'dish_enabled';
-  static const _kDishTime = 'dish_time';
-
-  static const defaultWaterTimes = [
-    TimeOfDayLike(hour: 10, minute: 0),
-    TimeOfDayLike(hour: 14, minute: 0),
-    TimeOfDayLike(hour: 17, minute: 0),
-  ];
-
-  /// 读取设置（首次使用返回默认值：喝水 10/14/17 点，晚安 22:30，美食 12:00）
-  static Future<ReminderSettings> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final waterTimesStr = prefs.getString(_kWaterTimes);
-    return ReminderSettings(
-      waterEnabled: prefs.getBool(_kWaterEnabled) ?? true,
-      waterTimes: waterTimesStr == null
-          ? defaultWaterTimes
-          : waterTimesStr
-              .split(',')
-              .where((s) => s.isNotEmpty)
-              .map(TimeOfDayLike.decode)
-              .toList(),
-      nightEnabled: prefs.getBool(_kNightEnabled) ?? true,
-      nightTime: TimeOfDayLike.decode(prefs.getString(_kNightTime) ?? '22:30'),
-      dishEnabled: prefs.getBool(_kDishEnabled) ?? true,
-      dishTime: TimeOfDayLike.decode(prefs.getString(_kDishTime) ?? '12:00'),
-    );
-  }
-
-  static Future<void> saveSettings(ReminderSettings settings) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kWaterEnabled, settings.waterEnabled);
-    await prefs.setString(
-        _kWaterTimes, settings.waterTimes.map((t) => t.encode()).join(','));
-    await prefs.setBool(_kNightEnabled, settings.nightEnabled);
-    await prefs.setString(_kNightTime, settings.nightTime.encode());
-    await prefs.setBool(_kDishEnabled, settings.dishEnabled);
-    await prefs.setString(_kDishTime, settings.dishTime.encode());
   }
 }
