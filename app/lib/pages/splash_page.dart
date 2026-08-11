@@ -101,22 +101,22 @@ class _SplashPageState extends State<SplashPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        '珍惜 · 爱 · 温暖',
+                        'Compass of Love',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Cherish Love Warmth · 专属美食关怀',
+                      const Text(
+                        '& Wanderlust',
                         style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 6),
                       GestureDetector(
                         onTap: _finish,
                         child: Container(
@@ -162,19 +162,19 @@ class _SplashPageState extends State<SplashPage> {
             const Text('❤️', style: TextStyle(fontSize: 56)),
             const SizedBox(height: 16),
             const Text(
-              '珍惜 · 爱 · 温暖',
+              'Compass of Love',
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Cherish Love Warmth',
+            const Text(
+              '& Wanderlust',
               style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 32),

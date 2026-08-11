@@ -111,9 +111,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         controller: _serverCtrl,
                         keyboardType: TextInputType.url,
                         decoration: const InputDecoration(
-                          labelText: '后端地址',
-                          hintText: 'http://192.168.1.100:8000',
-                          helperText: '电脑与手机需在同一网络；部署公网后填域名',
+                          labelText: '后端地址（高级）',
+                          hintText: 'http://139.196.27.224',
+                          helperText: '已默认连接云端服务器，一般无需修改；换服务器时才需要改这里',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),

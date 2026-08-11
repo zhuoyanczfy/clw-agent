@@ -26,7 +26,7 @@ class GiftingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '专属美食关怀',
+      title: 'Compass of Love & Wanderlust',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: showSplash ? const _Root() : const MainShell(),
