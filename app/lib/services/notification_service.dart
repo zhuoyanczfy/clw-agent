@@ -25,7 +25,7 @@ class NotificationService {
     tzdata.initializeTimeZones();
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidInit);
-    await _plugin.initialize(initSettings);
+    await _plugin.initialize(settings: initSettings);
 
     // Android 13+ 需要运行时通知权限
     final android = _plugin.resolvePlatformSpecificImplementation<
@@ -94,11 +94,11 @@ class NotificationService {
       scheduled = scheduled.add(const Duration(days: 1));
     }
     await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      scheduled,
-      const NotificationDetails(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: scheduled,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
