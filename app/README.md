@@ -55,12 +55,14 @@ adb install -r build\app\outputs\flutter-apk\app-release.apk
 
 ## 五、内容运营
 
-加载页图片、历史故事通过后端命令行工具上传（详见 [backend/README.md](../backend/README.md)）：
+加载页图片、历史故事通过 shell/ 目录下的命令行工具上传（详见 [backend/README.md](../backend/README.md)）：
 
 ```powershell
 cd backend
-python upload.py splash 图片.png "标题"                          # 加载页图片
-python upload.py story "标题" 正文.txt --category 历史故事        # 故事
+python ..\shell\upload.py splash 图片.png "标题"                    # 加载页图片
+python ..\shell\upload.py story "标题" 正文.txt --category 历史故事  # 故事
+python ..\shell\import_stories.py 故事目录 --dry-run               # 批量导入（预览）
+python ..\shell\process_splash.py ..\tmp --upload                # 加载页图批量处理+上传
 ```
 
 也可直接登录 Django Admin（http://127.0.0.1:8000/admin）管理。

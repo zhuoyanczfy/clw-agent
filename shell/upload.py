@@ -15,13 +15,13 @@ from pathlib import Path
 
 import requests
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent  # shell/（config.ini 在上一级 backend/config/）
 
 
 def load_token():
     parser = configparser.ConfigParser()
     parser.read_string(
-        '[default]\n' + (BASE / 'config' / 'config.ini').read_text(encoding='utf-8')
+        '[default]\n' + (BASE.parent / 'config' / 'config.ini').read_text(encoding='utf-8')
     )
     return parser.get('default', 'upload_token', fallback='').strip()
 

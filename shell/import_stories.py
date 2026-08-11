@@ -12,10 +12,10 @@
     正文从这里开始……
 
 用法：
-  python import_stories.py                    # 默认导入 backend/stories_inbox/
-  python import_stories.py 我的故事目录 --category 小小说 --source 佚名
-  python import_stories.py --dry-run          # 只预览，不真正上传
-  python import_stories.py --url http://139.196.27.224
+  python shell/import_stories.py                    # 默认导入 shell/stories_inbox/
+  python shell/import_stories.py 我的故事目录 --category 小小说 --source 佚名
+  python shell/import_stories.py --dry-run          # 只预览，不真正上传
+  python shell/import_stories.py --url http://139.196.27.224
 """
 import argparse
 import configparser
@@ -24,13 +24,13 @@ from pathlib import Path
 
 import requests
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent  # shell/（config.ini 在上一级 backend/config/）
 
 
 def load_token():
     parser = configparser.ConfigParser()
     parser.read_string(
-        '[default]\n' + (BASE / 'config' / 'config.ini').read_text(encoding='utf-8')
+        '[default]\n' + (BASE.parent / 'config' / 'config.ini').read_text(encoding='utf-8')
     )
     return parser.get('default', 'upload_token', fallback='').strip()
 
@@ -65,7 +65,7 @@ def parse_file(path):
 def main():
     arg = argparse.ArgumentParser(description='批量导入故事书')
     arg.add_argument('dir', nargs='?', default=str(BASE / 'stories_inbox'),
-                     help='故事目录（默认 backend/stories_inbox/）')
+                     help='故事目录（默认 shell/stories_inbox/）')
     arg.add_argument('--category', default='小小说', help='默认分类（文件头可单独覆盖）')
     arg.add_argument('--source', default='', help='默认来源/作者（文件头可单独覆盖）')
     arg.add_argument('--url', default='http://139.196.27.224', help='后端地址（默认云服务器）')
