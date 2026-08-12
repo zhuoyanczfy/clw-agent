@@ -32,9 +32,4 @@ urlpatterns = [
     # 加载页图片
     path('api/splash/', views.api_splash, name='splash'),
     path('api/splash/upload/', views.api_splash_upload, name='splash_upload'),
-    # 故事书
-    path('api/stories/', views.api_stories, name='stories'),
-    path('api/stories/categories/', views.api_story_categories, name='story_categories'),
-    path('api/stories/random/', views.api_story_random, name='story_random'),
-    path('api/stories/<int:story_id>/', views.api_story_detail, name='story_detail'),
 ]

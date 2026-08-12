@@ -99,11 +99,7 @@ python manage.py runserver 0.0.0.0:8000
 | `POST /api/recommend/verify/` | 推荐卡片真实性校验（高德兜底） |
 | `GET /api/splash/` | 当日加载页图片（同一天固定一张、相邻两天不重复） |
 | `POST /api/splash/upload/` | 上传加载页图片（需 `X-Upload-Token`，multipart） |
-| `GET/POST /api/stories/` | 故事列表（支持 `?category=`、`?content=1`） / 上传故事（需 Token） |
-| `GET /api/stories/<id>/` | 故事详情（含正文） |
-| `GET /api/stories/random/` | 随机一篇故事（含正文） |
 | `GET /api/config/` | APP 云端配置（首页文案/昵称/认识日期 + 提醒文案/时间/开关，Admin 改后无需重打包） |
-| `GET /api/stories/categories/` | 故事分类列表 |
 
 ### 让 APP 走后端（局域网）
 

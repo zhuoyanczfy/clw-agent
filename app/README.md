@@ -1,6 +1,6 @@
 # Compass of Love & Wanderlust 🎁
 
-送给她的礼物 APP（Flutter 客户端）：专属问候、认识天数、每日美食推荐、足迹地图、AI 推荐官、随机加载页、故事书。
+送给她的礼物 APP（Flutter 客户端）：专属问候、认识天数、每日美食推荐、足迹地图、AI 推荐官、随机加载页。
 
 后端（Django API）见 [backend/](../backend/README.md)，接口与数据由后端提供。
 
@@ -19,7 +19,7 @@
 | `herName` | 她的昵称（显示在首页顶部和欢迎语） |
 | `meetDate` | 你们认识的日期（格式 YYYY-MM-DD），首页自动计算「认识天数」 |
 | `greeting` | 首页专属欢迎语 |
-| `serverUrl` | 后端 API 地址（默认空 = 纯本地模式；填了才启用加载页/故事书/云端数据） |
+| `serverUrl` | 后端 API 地址（默认空 = 纯本地模式；填了才启用加载页/云端数据） |
 | `dailyDishTitle` | 今日美食卡片的文案前缀 |
 
 > 后端地址也可以在 APP「设置」页随时修改并保存，无需重新打包。
@@ -44,25 +44,23 @@ adb install -r build\app\outputs\flutter-apk\app-release.apk
 
 **方式二：直接拷贝** APK 文件到手机（微信/QQ/数据线均可），点击安装（需允许「安装未知来源应用」）。
 
-## 四、连接后端（加载页 / 故事书 / 云端数据）
+## 四、连接后端（加载页 / 云端数据）
 
 1. 电脑上启动后端：`cd backend; .\.venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000`
 2. 手机连**同一 WiFi**，查看电脑局域网 IP：`ipconfig`（IPv4 地址）
 3. APP「设置」页 → 后端服务 → 填 `http://<电脑局域网IP>:8000` → 测试连接 → 保存
-4. 重启 APP，即可看到每日随机加载页；首页「故事书」卡片进入故事列表
+4. 重启 APP，即可看到每日随机加载页
 
 > 不在同一网络：用内网穿透（cpolar / frp 等）或部署到公网服务器（见 backend/deploy/），把公网地址填进设置页即可，APP 无需重新打包。
 
 ## 五、内容运营
 
-加载页图片、历史故事通过 shell/ 目录下的命令行工具上传（详见 [backend/README.md](../backend/README.md)）：
+加载页图片通过 shell/ 目录下的命令行工具上传（详见 [backend/README.md](../backend/README.md)）：
 
 ```powershell
 cd backend
-python ..\shell\upload.py splash 图片.png "标题"                    # 加载页图片
-python ..\shell\upload.py story "标题" 正文.txt --category 历史故事  # 故事
-python ..\shell\import_stories.py 故事目录 --dry-run               # 批量导入（预览）
-python ..\shell\process_splash.py ..\tmp --upload                # 加载页图批量处理+上传
+python ..\shell\upload.py 图片.png "标题"                    # 加载页图片
+python ..\shell\process_splash.py ..\tmp --upload          # 加载页图批量处理+上传
 ```
 
 也可直接登录 Django Admin（http://127.0.0.1:8000/admin）管理。

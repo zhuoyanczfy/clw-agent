@@ -20,7 +20,6 @@ from .models import (
     Restaurant,
     SplashImage,
     SplashState,
-    Story,
     WishlistItem,
 )
 from .services.agent import build_system_prompt, execute_tool_calls
@@ -620,97 +619,3 @@ def api_splash_upload(request):
         image=f,
     )
     return JsonResponse({'ok': True, 'splash': _splash_json(img)}, status=201)
-
-
-# ============ 故事书 ============
-
-
-def _story_json(story, with_content=False):
-    data = {
-        'id': story.pk,
-        'title': story.title,
-        'category': story.category,
-        'cover': story.cover.url if story.cover else '',
-        'source': story.source,
-        'updated_at': story.updated_at.strftime('%Y-%m-%d'),
-    }
-    if with_content:
-        data['content'] = story.content
-    return data
-
-
-@csrf_exempt
-@require_http_methods(['GET', 'POST'])
-def api_stories(request):
-    """故事列表（?category= 过滤，?content=1 时含正文），或上传故事（需 X-Upload-Token）。"""
-    if request.method == 'GET':
-        qs = Story.objects.filter(enabled=True)
-        category = request.GET.get('category')
-        if category:
-            qs = qs.filter(category=category)
-        with_content = request.GET.get('content') == '1'
-        return JsonResponse({'stories': [_story_json(s, with_content=with_content) for s in qs]})
-
-    token = request.headers.get('X-Upload-Token', '')
-    if not token or token != _upload_token():
-        return JsonResponse({'error': '上传令牌无效（请求头 X-Upload-Token）'}, status=403)
-
-    if 'json' in (request.content_type or ''):
-        try:
-            data = json.loads(request.body or b'{}')
-        except ValueError:
-            return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
-        files = {}
-    else:
-        data = request.POST
-        files = request.FILES
-
-    title = (data.get('title') or '').strip()
-    content = (data.get('content') or '').strip()
-    if not title or not content:
-        return JsonResponse({'error': '标题与内容不能为空'}, status=400)
-
-    story = Story(
-        title=title[:200],
-        category=(data.get('category') or '历史故事').strip()[:50],
-        content=content,
-        source=(data.get('source') or '').strip()[:100],
-    )
-    cover = files.get('cover')
-    if cover:
-        cover_field = forms.ImageField()
-        try:
-            cover_field.clean(cover)
-        except forms.ValidationError as exc:
-            return JsonResponse({'error': f'封面无效：{exc}'}, status=400)
-        story.cover = cover
-    story.save()
-    return JsonResponse({'ok': True, 'story': _story_json(story)}, status=201)
-
-
-def api_story_detail(request, story_id):
-    """故事详情（含正文）。"""
-    story = get_object_or_404(Story, pk=story_id, enabled=True)
-    return JsonResponse({'story': _story_json(story, with_content=True)})
-
-
-def api_story_random(request):
-    """随机一篇故事（故事书首页「随机来一篇」）。"""
-    import random
-
-    qs = Story.objects.filter(enabled=True)
-    if not qs.exists():
-        return JsonResponse({'error': '还没有故事，稍后再来看看吧'}, status=404)
-    story = random.choice(list(qs))
-    return JsonResponse({'story': _story_json(story, with_content=True)})
-
-
-def api_story_categories(request):
-    """故事分类列表。"""
-    categories = (
-        Story.objects.filter(enabled=True)
-        .values_list('category', flat=True)
-        .distinct()
-        .order_by('category')
-    )
-    return JsonResponse({'categories': list(categories)})
