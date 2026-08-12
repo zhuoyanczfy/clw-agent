@@ -110,7 +110,8 @@ class _FootprintPageState extends State<FootprintPage> {
     final showAll = _selectedDistrictId == null;
     return [
       for (final r in _restaurants)
-        if (showAll || r.districtId == _selectedDistrictId)
+        // 后端部分餐厅可能没有坐标（如手动录入），跳过避免 LatLng 空值异常
+        if ((showAll || r.districtId == _selectedDistrictId) && r.lat != null && r.lng != null)
           Marker(
             point: LatLng(r.lat!, r.lng!),
             width: 36,
@@ -283,8 +284,11 @@ class _FootprintPageState extends State<FootprintPage> {
                     maxZoom: 17,
                   ),
                   children: [
+                    // 底图用腾讯瓦片（国内可达、无需 key）；OSM 官方源在国内经常连不上。
+                    // 腾讯瓦片是 TMS 风格（y 自南向北），与 flutter_map 默认 XYZ 相反，需 tms: true 翻转
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate: 'https://rt0.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=1',
+                      tms: true,
                       userAgentPackageName: 'com.gift.dailycare',
                     ),
                     PolygonLayer(polygons: _buildPolygons()),
