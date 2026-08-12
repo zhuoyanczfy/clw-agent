@@ -85,8 +85,9 @@ class _FootprintPageState extends State<FootprintPage> {
       final isSelected = _selectedDistrictId != null &&
           _selectedDistrict != null &&
           adcode == _selectedDistrict!.adcode;
-      final color = isSelected
-          ? const Color(0xFFFF8C9E)
+      // 选中区不填充，仅用高亮轮廓圈出；未选中区保留淡色区分去过/没去过
+      final Color? color = isSelected
+          ? null
           : visited > 0
               ? const Color(0x33FF8C9E)
               : const Color(0x1A9B8F85);
