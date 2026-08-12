@@ -1,4 +1,4 @@
-package com.gift.gifting_app
+package com.gift.dailycare
 
 import io.flutter.embedding.android.FlutterActivity
 

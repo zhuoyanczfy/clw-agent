@@ -12,8 +12,13 @@ import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 初始化通知插件与权限（每日提醒在 _Root 拉到云端配置后再调度）
-  await NotificationService.init();
+  // 初始化通知插件与权限（每日提醒在 _Root 拉到云端配置后再调度）。
+  // 通知初始化失败不能影响 APP 启动（如模拟器/低版本系统不支持时）。
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    debugPrint('通知初始化失败（不影响启动）: $e');
+  }
   runApp(const GiftingApp());
 }
 
@@ -53,8 +58,16 @@ class _RootState extends State<_Root> {
 
   /// 启动时拉取云端配置并按配置调度每日提醒（容错，失败用本地默认值）
   Future<void> _bootstrap() async {
-    await RemoteConfig.load();
-    await NotificationService.scheduleAll();
+    try {
+      await RemoteConfig.load();
+    } catch (_) {
+      // 配置拉取失败用本地默认值
+    }
+    try {
+      await NotificationService.scheduleAll();
+    } catch (_) {
+      // 通知调度失败不影响使用
+    }
   }
 
   @override

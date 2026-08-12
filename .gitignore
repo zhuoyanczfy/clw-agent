@@ -9,6 +9,7 @@ app/android/.gradle/
 app/android/local.properties
 app/android/app/.cxx/
 app/android/app/.externalNativeBuild/
+app/android/build/
 
 # 生成的图标预览
 app/icon_preview.png
@@ -35,5 +36,5 @@ Thumbs.db
 Desktop.ini
 *.log
 
-# ��ʱ�ز�Ŀ¼������ҳԭͼ�ȣ�
+# 临时素材目录（加载页原图等）
 tmp/
