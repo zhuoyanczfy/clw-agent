@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
 import 'pet_page.dart';
+import 'reminder_settings_page.dart';
 
 /// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态（文案由后台配置）
 class HomePage extends StatefulWidget {
@@ -341,6 +342,12 @@ class _HomePageState extends State<HomePage> {
     ).push(MaterialPageRoute(builder: (_) => const PetPage())).then((_) => _load());
   }
 
+  void _openReminderSettings() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const ReminderSettingsPage()))
+        .then((_) => setState(() {}));
+  }
+
   // ---- 猫咪名片入口卡片 ----
   Widget _buildPetCard() {
     final pet = _pet;
@@ -416,12 +423,7 @@ class _HomePageState extends State<HomePage> {
       delay: const Duration(milliseconds: 300),
       child: Card(
         child: SquishyTap(
-          onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('每日提醒由后台统一配置，无需在手机端设置'),
-              duration: Duration(seconds: 2),
-            ),
-          ),
+          onTap: _openReminderSettings,
           borderRadius: BorderRadius.circular(20),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -453,7 +455,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '喝水 · 晚安 · 美食推荐，$onCount 项已开启',
+                        '喝水 · 晚安 · 美食推荐，$onCount 项已开启，点击可调整',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppTheme.textLight,

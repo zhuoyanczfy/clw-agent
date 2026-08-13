@@ -4,6 +4,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/pet.dart';
 import 'dish_service.dart';
+import 'foodmap_api.dart';
 import 'remote_config.dart';
 
 /// 定时通知服务：每天定时推送喝水、晚安、美食推荐提醒。
@@ -129,6 +130,21 @@ class NotificationService {
     _scheduledPetEventIds
       ..clear()
       ..addAll(active);
+  }
+
+  /// 重排全部提醒：每日提醒 + 宠物疫苗/驱虫到期提醒。
+  /// 设置页改动提醒配置后调用；宠物数据拉取失败不影响每日提醒。
+  static Future<void> rescheduleAll() async {
+    await scheduleAll();
+    try {
+      final pets = await FoodmapApi.fetchPets();
+      for (final pet in pets) {
+        final events = await FoodmapApi.fetchPetEvents(pet.id);
+        await schedulePetReminders(events);
+      }
+    } catch (_) {
+      // 宠物提醒拉取失败不影响每日提醒
+    }
   }
 
   /// 每天固定时间重复调度

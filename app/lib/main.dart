@@ -6,7 +6,6 @@ import 'pages/footprint_page.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/splash_page.dart';
-import 'services/foodmap_api.dart';
 import 'services/notification_service.dart';
 import 'services/remote_config.dart';
 import 'theme.dart';
@@ -58,7 +57,7 @@ class _RootState extends State<_Root> {
     _bootstrap();
   }
 
-  /// 启动时拉取云端配置并按配置调度每日提醒（容错，失败用本地默认值）
+  /// 启动时拉取云端配置并按配置调度全部提醒（容错，失败用本地默认值）
   Future<void> _bootstrap() async {
     try {
       await RemoteConfig.load();
@@ -66,19 +65,10 @@ class _RootState extends State<_Root> {
       // 配置拉取失败用本地默认值
     }
     try {
-      await NotificationService.scheduleAll();
+      // 每日关怀提醒 + 宠物疫苗/驱虫到期提醒
+      await NotificationService.rescheduleAll();
     } catch (_) {
       // 通知调度失败不影响使用
-    }
-    try {
-      // 宠物疫苗/驱虫到期提醒（云端无数据时跳过）
-      final pets = await FoodmapApi.fetchPets();
-      for (final pet in pets) {
-        final events = await FoodmapApi.fetchPetEvents(pet.id);
-        await NotificationService.schedulePetReminders(events);
-      }
-    } catch (_) {
-      // 宠物提醒调度失败不影响使用
     }
   }
 

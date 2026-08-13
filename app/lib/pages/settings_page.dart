@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../services/api_config.dart';
 import '../services/foodmap_api.dart';
 import '../theme.dart';
+import '../widgets/cute_widgets.dart';
+import 'reminder_settings_page.dart';
 
-/// 设置页：后端服务地址。
-/// 提醒文案 / 时间 / 开关由后台（Django Admin → /api/config/）统一配置，
-/// App 内不开放手动修改。
+/// 设置页：后端服务地址 + 每日关怀提醒入口。
+/// 提醒的开关/时间/文案可在 APP 内配置（本地优先生效，可恢复后台默认）。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -93,7 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 4),
               const Text(
-                '每日关怀提醒由后台统一配置，无需在手机端设置',
+                '后端服务与每日关怀提醒配置',
                 style: TextStyle(fontSize: 13, color: AppTheme.textLight),
               ),
               const SizedBox(height: 20),
@@ -165,27 +166,51 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 20),
 
-              // ---- 每日关怀提醒（后台配置说明） ----
-              _sectionHeader('⏰', '每日关怀提醒', '由后台统一配置'),
+              // ---- 每日关怀提醒（APP 内可配置） ----
+              _sectionHeader('⏰', '每日关怀提醒', '开关 / 时间 / 文案'),
               const SizedBox(height: 12),
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        '喝水、晚安、美食推荐提醒的文案 / 时间 / 开关',
-                        style: TextStyle(fontSize: 14, height: 1.6),
+                child: SquishyTap(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ReminderSettingsPage(),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        '请在后台管理（Django Admin）的「APP配置」中修改，'
-                        'App 启动时会自动拉取最新配置并生效，无需重新安装',
-                        style:
-                            TextStyle(fontSize: 12, color: AppTheme.textLight, height: 1.6),
-                      ),
-                    ],
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Text('💧', style: TextStyle(fontSize: 22)),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '喝水 · 晚安 · 美食推荐',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textDark,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                '点这里调整开关、提醒时间和通知文案',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: AppTheme.textLight),
+                      ],
+                    ),
                   ),
                 ),
               ),

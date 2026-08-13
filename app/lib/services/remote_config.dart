@@ -24,12 +24,19 @@ class TimeOfDayLike {
 }
 
 /// 云端配置服务：启动时从后端拉取配置（键值对），未配置后端或拉取失败时
-/// 回退 [AppConfig] 本地默认值。首页文案、通知文案/时间/开关全部由后台
-/// （Django Admin → /api/config/）控制，APP 内不开放手动修改。
+/// 回退 [AppConfig] 本地默认值。
+///
+/// 提醒类的开关/时间/文案支持 APP 内自定义（见 [setOverride]）：
+/// 优先级为 本地用户覆盖 > 云端配置 > 内置默认值；
+/// 未改过的项仍跟随云端（后台可统一改默认），改过可一键恢复。
 class RemoteConfig {
   RemoteConfig._();
 
   static const _cacheKey = 'remote_config_cache';
+  static const _overridesKey = 'reminder_overrides';
+
+  /// 本地用户覆盖值（APP 设置页改过的键），优先级最高
+  static Map<String, String> _overrides = const {};
 
   // 配置键（与 backend/foodmap/views.py 的 APP_CONFIG_DEFAULTS 对齐）
   static const kHerName = 'her_name';
@@ -57,7 +64,16 @@ class RemoteConfig {
 
   /// 启动时调用：拉取云端配置（5 秒超时容错），成功后缓存到本机；
   /// 失败时尝试读上次缓存，都没有则使用本地默认值。
+  /// 本地用户覆盖（设置页改过的提醒配置）一并加载。
   static Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_overridesKey);
+      if (raw != null && raw.isNotEmpty) {
+        _overrides = (jsonDecode(raw) as Map<String, dynamic>)
+            .map((k, v) => MapEntry(k, v?.toString() ?? ''));
+      }
+    } catch (_) {}
     try {
       final values = await FoodmapApi.fetchConfig()
           .timeout(const Duration(seconds: 5));
@@ -81,10 +97,35 @@ class RemoteConfig {
     }
   }
 
+  // ---------- 本地用户覆盖（APP 设置页） ----------
+
+  /// 某配置键是否被用户在 APP 内改过（改过则不再跟随云端）
+  static bool hasOverride(String key) => _overrides.containsKey(key);
+
+  /// 保存一项用户覆盖并立即生效（内存），持久化到本机
+  static Future<void> setOverride(String key, String value) async {
+    _overrides = {..._overrides, key: value};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_overridesKey, jsonEncode(_overrides));
+    } catch (_) {}
+  }
+
+  /// 清除全部用户覆盖，恢复跟随云端/默认值
+  static Future<void> resetOverrides() async {
+    _overrides = const {};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_overridesKey);
+    } catch (_) {}
+  }
+
   // ---------- 通用读取 ----------
 
-  /// 取字符串配置；云端无值或为空时回退 [fallback] / 本地默认
+  /// 取字符串配置；本地覆盖 > 云端 > [fallback] / 本地默认
   static String get(String key, {String? fallback}) {
+    final o = _overrides[key];
+    if (o != null) return o;
     final v = _values[key];
     if (v != null && v.isNotEmpty) return v;
     return fallback ?? _localDefault(key);
