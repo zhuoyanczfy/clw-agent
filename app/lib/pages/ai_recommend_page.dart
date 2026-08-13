@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/foodmap_api.dart';
 import '../theme.dart';
+import '../widgets/cute_widgets.dart';
 import 'wishlist_page.dart';
 
 /// 聊天消息
@@ -95,7 +96,9 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
 
   /// 从 AI 回复中提取形如「店名（区）」的推荐，供一键收藏
   void _extractRecommendations(String reply) {
-    final regex = RegExp(r'[「【】"]?\s*([\u4e00-\u9fa5A-Za-z0-9·&（）()]{2,20}?)\s*[」】"]?\s*(?:（|\(|【)([\u4e00-\u9fa5]{2,4}区)(?:）|\)|】)');
+    final regex = RegExp(
+      r'[「【】"]?\s*([\u4e00-\u9fa5A-Za-z0-9·&（）()]{2,20}?)\s*[」】"]?\s*(?:（|\(|【)([\u4e00-\u9fa5]{2,4}区)(?:）|\)|】)',
+    );
     final found = <Map<String, dynamic>>[];
     for (final m in regex.allMatches(reply)) {
       final name = m.group(1)!.trim();
@@ -120,12 +123,14 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         source: 'ai',
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${item['name']}」已加入待尝清单')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('「${item['name']}」已加入待尝清单')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -136,16 +141,14 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         title: const Text('美食推荐官'),
         actions: [
           IconButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const WishlistPage()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const WishlistPage())),
             icon: const Icon(Icons.favorite_outline),
             tooltip: '待尝清单',
           ),
           IconButton(
-            onPressed: _busy
-                ? null
-                : () => setState(() => _messages.clear()),
+            onPressed: _busy ? null : () => setState(() => _messages.clear()),
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: '清空对话',
           ),
@@ -155,24 +158,32 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         children: [
           // 推荐卡片（AI 回复中识别出的餐厅）
           if (_recommended.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              color: const Color(0xFFFFF3E0),
-              child: SizedBox(
-                height: 46,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    for (final item in _recommended)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ActionChip(
-                          avatar: const Icon(Icons.favorite, size: 16, color: AppTheme.primary),
-                          label: Text('${item['name']}'),
-                          onPressed: () => _collect(item),
+            BouncyIn(
+              offsetY: 0,
+              duration: const Duration(milliseconds: 350),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                color: const Color(0xFFFFF3E0),
+                child: SizedBox(
+                  height: 46,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (final item in _recommended)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ActionChip(
+                            avatar: const Icon(
+                              Icons.favorite,
+                              size: 16,
+                              color: AppTheme.primary,
+                            ),
+                            label: Text('${item['name']}'),
+                            onPressed: () => _collect(item),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -183,10 +194,13 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                 : ListView.builder(
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length + (_streaming.isNotEmpty ? 1 : 0),
+                    itemCount: _messages.length + (_busy ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == _messages.length) {
-                        return _bubble('assistant', _streaming, streaming: true);
+                        // 生成中：还没吐字时显示「正在输入」，否则显示流式气泡
+                        return _streaming.isNotEmpty
+                            ? _bubble('assistant', _streaming, streaming: true)
+                            : _typingBubble();
                       }
                       final m = _messages[index];
                       return _bubble(m.role, m.content);
@@ -214,7 +228,10 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
@@ -226,10 +243,14 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.send),
-                    style: IconButton.styleFrom(backgroundColor: AppTheme.primary),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -249,8 +270,10 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
           children: [
             const Icon(Icons.auto_awesome, size: 56, color: AppTheme.accent),
             const SizedBox(height: 16),
-            const Text('南京美食推荐官',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Text(
+              '南京美食推荐官',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             const Text(
               '它只从真实餐厅库里为你推荐\n可以问它：\n"周末适合约会的餐厅"、"鼓楼区哪家川菜好吃"',
@@ -265,31 +288,57 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
 
   Widget _bubble(String role, String content, {bool streaming = false}) {
     final isUser = role == 'user';
+    return BouncyIn(
+      offsetY: 18,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutBack,
+      child: Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78,
+          ),
+          decoration: BoxDecoration(
+            color: isUser ? AppTheme.primary : Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(isUser ? 16 : 4),
+              bottomRight: Radius.circular(isUser ? 4 : 16),
+            ),
+          ),
+          child: Text(
+            streaming ? '$content▌' : content,
+            style: TextStyle(
+              color: isUser ? Colors.white : AppTheme.textDark,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 「正在输入」气泡：三个圆点依次跳动
+  Widget _typingBubble() {
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
-        decoration: BoxDecoration(
-          color: isUser ? AppTheme.primary : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: const BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16),
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
           ),
         ),
-        child: Text(
-          streaming ? '$content▌' : content,
-          style: TextStyle(
-            color: isUser ? Colors.white : AppTheme.textDark,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
+        child: const TypingDots(color: AppTheme.textLight),
       ),
     );
   }

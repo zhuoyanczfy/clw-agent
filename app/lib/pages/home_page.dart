@@ -5,6 +5,7 @@ import '../models/dish.dart';
 import '../services/dish_service.dart';
 import '../services/remote_config.dart';
 import '../theme.dart';
+import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
 
 /// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态（文案由后台配置）
@@ -63,41 +64,49 @@ class _HomePageState extends State<HomePage> {
     final greeting = hour < 6
         ? '夜深了'
         : hour < 11
-            ? '早上好'
-            : hour < 14
-                ? '中午好'
-                : hour < 18
-                    ? '下午好'
-                    : '晚上好';
+        ? '早上好'
+        : hour < 14
+        ? '中午好'
+        : hour < 18
+        ? '下午好'
+        : '晚上好';
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     final now = DateTime.now();
-    final dateStr =
-        '${now.month}月${now.day}日 · 星期${weekdays[now.weekday - 1]}';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$greeting，${RemoteConfig.herName}',
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
+    final dateStr = '${now.month}月${now.day}日 · 星期${weekdays[now.weekday - 1]}';
+    return BouncyIn(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$greeting，${RemoteConfig.herName}',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textDark,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${RemoteConfig.greeting} · $dateStr',
-                style: const TextStyle(fontSize: 14, color: AppTheme.textLight),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Text(
+                  '${RemoteConfig.greeting} · $dateStr',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.textLight,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const _HeartBadge(),
-      ],
+          HeartBeat(
+            maxScale: 1.15,
+            duration: const Duration(milliseconds: 1000),
+            child: const _HeartBadge(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -105,49 +114,52 @@ class _HomePageState extends State<HomePage> {
   Widget _buildDaysCard() {
     final meet = DateTime.tryParse(RemoteConfig.meetDate) ?? DateTime.now();
     final days = DateTime.now().difference(meet).inDays + 1;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.primary, AppTheme.primaryDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return BouncyIn(
+      offsetY: 20,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppTheme.primary, AppTheme.primaryDark],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
         ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '我们认识的第 $days 天',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '我们认识的第 $days 天',
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
-            style: const TextStyle(fontSize: 13, color: Color(0xFFFFF1F1)),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _daysItem('$days', '相识天数'),
-              const SizedBox(width: 16),
-              _daysItem('${days ~/ 7}', '相识周数'),
-              const SizedBox(width: 16),
-              _daysItem('${days ~/ 30}', '相识月数'),
-            ],
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
+              style: const TextStyle(fontSize: 13, color: Color(0xFFFFF1F1)),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _daysItem(days, '相识天数'),
+                const SizedBox(width: 16),
+                _daysItem(days ~/ 7, '相识周数'),
+                const SizedBox(width: 16),
+                _daysItem(days ~/ 30, '相识月数'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _daysItem(String value, String label) {
+  Widget _daysItem(int value, String label) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -157,8 +169,8 @@ class _HomePageState extends State<HomePage> {
         ),
         child: Column(
           children: [
-            Text(
-              value,
+            BouncyNumber(
+              value: value,
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -211,80 +223,92 @@ class _HomePageState extends State<HomePage> {
             ),
           )
         else
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => _openDish(dish),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Stack(
-                    children: [
-                      AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: CachedNetworkImage(
-                          imageUrl: dish.imageUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (_, _) => Container(
-                            color: const Color(0xFFFFE9E9),
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          errorWidget: (_, _, _) => Container(
-                            color: const Color(0xFFFFE9E9),
-                            child: const Center(
-                              child: Text('🫕', style: TextStyle(fontSize: 48)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 12,
-                        bottom: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            dish.category,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          BouncyIn(
+            offsetY: 28,
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: SquishyTap(
+                onTap: () => _openDish(dish),
+                borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
                       children: [
-                        Text(
-                          RemoteConfig.dailyDishTitle,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.primaryDark,
+                        AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: CachedNetworkImage(
+                            imageUrl: dish.imageUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, _) => Container(
+                              color: const Color(0xFFFFE9E9),
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            ),
+                            errorWidget: (_, _, _) => Container(
+                              color: const Color(0xFFFFE9E9),
+                              child: const Center(
+                                child: HeartBeat(
+                                  maxScale: 1.1,
+                                  child: Text(
+                                    '🫕',
+                                    style: TextStyle(fontSize: 48),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          dish.name,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark,
+                        Positioned(
+                          left: 12,
+                          bottom: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              dish.category,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            RemoteConfig.dailyDishTitle,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.primaryDark,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            dish.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -293,9 +317,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _openDish(Dish dish) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DishPage(dish: dish)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => DishPage(dish: dish)));
   }
 
   // ---- 提醒状态卡片（状态由后台配置） ----
@@ -304,54 +328,60 @@ class _HomePageState extends State<HomePage> {
     final nightOn = RemoteConfig.nightEnabled;
     final dishOn = RemoteConfig.dishEnabled;
     final onCount = [waterOn, nightOn, dishOn].where((b) => b).length;
-    return Card(
-      child: InkWell(
-        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('每日提醒由后台统一配置，无需在手机端设置'),
-            duration: Duration(seconds: 2),
+    return BouncyIn(
+      offsetY: 20,
+      delay: const Duration(milliseconds: 300),
+      child: Card(
+        child: SquishyTap(
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('每日提醒由后台统一配置，无需在手机端设置'),
+              duration: Duration(seconds: 2),
+            ),
           ),
-        ),
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF0E3),
-                  borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF0E3),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Text('⏰', style: TextStyle(fontSize: 22)),
+                  ),
                 ),
-                child: const Center(
-                  child: Text('⏰', style: TextStyle(fontSize: 22)),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '每日关怀提醒',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textDark,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '每日关怀提醒',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '喝水 · 晚安 · 美食推荐，$onCount 项已开启',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppTheme.textLight),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        '喝水 · 晚安 · 美食推荐，$onCount 项已开启',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, color: AppTheme.textLight),
-            ],
+                const Icon(Icons.chevron_right, color: AppTheme.textLight),
+              ],
+            ),
           ),
         ),
       ),
@@ -383,9 +413,7 @@ class _HeartBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: const Center(
-        child: Text('❤️', style: TextStyle(fontSize: 22)),
-      ),
+      child: const Center(child: Text('❤️', style: TextStyle(fontSize: 22))),
     );
   }
 }

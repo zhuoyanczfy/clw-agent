@@ -9,6 +9,7 @@ import 'pages/splash_page.dart';
 import 'services/notification_service.dart';
 import 'services/remote_config.dart';
 import 'theme.dart';
+import 'widgets/cute_widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -108,34 +109,42 @@ class _MainShellState extends State<MainShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         backgroundColor: Colors.white,
         indicatorColor: const Color(0xFFFFE9E9),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home, color: AppTheme.primaryDark),
+            icon: _navIcon(0, Icons.home_outlined, Icons.home),
             label: '首页',
           ),
           NavigationDestination(
-            icon: Icon(Icons.restaurant_menu_outlined),
-            selectedIcon: Icon(Icons.restaurant_menu, color: AppTheme.primaryDark),
+            icon: _navIcon(
+              1,
+              Icons.restaurant_menu_outlined,
+              Icons.restaurant_menu,
+            ),
             label: '美食',
           ),
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map, color: AppTheme.primaryDark),
+            icon: _navIcon(2, Icons.map_outlined, Icons.map),
             label: '足迹',
           ),
           NavigationDestination(
-            icon: Icon(Icons.smart_toy_outlined),
-            selectedIcon: Icon(Icons.smart_toy, color: AppTheme.primaryDark),
+            icon: _navIcon(3, Icons.smart_toy_outlined, Icons.smart_toy),
             label: '推荐官',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings, color: AppTheme.primaryDark),
+            icon: _navIcon(4, Icons.settings_outlined, Icons.settings),
             label: '设置',
           ),
         ],
       ),
+    );
+  }
+
+  /// 底部导航图标：选中时弹跳一下（Q 版手感）
+  Widget _navIcon(int index, IconData icon, IconData selectedIcon) {
+    return BounceNavIcon(
+      selected: _index == index,
+      icon: Icon(icon),
+      selectedIcon: Icon(selectedIcon, color: AppTheme.primaryDark),
     );
   }
 }
