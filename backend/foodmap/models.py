@@ -28,6 +28,9 @@ class Restaurant(models.Model):
     lng = models.FloatField('经度', null=True, blank=True)
     amap_id = models.CharField('高德POI ID', max_length=50, null=True, blank=True, unique=True)
     rating = models.FloatField('高德评分', null=True, blank=True)
+    photos = models.TextField('门店照片', blank=True, help_text='JSON 数组 [{"title","url"}]，推荐官卡片用')
+    tag = models.CharField('特色菜标签', max_length=300, blank=True, help_text='高德 tag 字段，逗号分隔')
+    cost = models.FloatField('人均消费(元)', null=True, blank=True)
 
     class Meta:
         verbose_name = '餐厅'

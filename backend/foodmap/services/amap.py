@@ -86,8 +86,23 @@ def gcj02_to_wgs84(lng, lat):
     magic = 1 - GCJ_EE * magic * magic
     sqrt_magic = math.sqrt(magic)
     d_lat = (d_lat * 180.0) / ((GCJ_A * (1 - GCJ_EE)) / (magic * sqrt_magic) * math.pi)
-    d_lng = (d_lng * 180.0) / (GCJ_A / sqrt_magic * math.cos(rad_lat) * math.pi)
+    d_lng = (d_lng * 180.0) / ((GCJ_A / sqrt_magic) * math.cos(rad_lat) * math.pi)
     return lng - d_lng, lat - d_lat
+
+
+def wgs84_to_gcj02(lng, lat):
+    """WGS-84(标准) -> GCJ-02(高德)，静态地图等需要 GCJ 坐标的高德服务用。"""
+    if _out_of_china(lng, lat):
+        return lng, lat
+    d_lat = _transform_lat(lng - 105.0, lat - 35.0)
+    d_lng = _transform_lng(lng - 105.0, lat - 35.0)
+    rad_lat = lat / 180.0 * math.pi
+    magic = math.sin(rad_lat)
+    magic = 1 - GCJ_EE * magic * magic
+    sqrt_magic = math.sqrt(magic)
+    d_lat = (d_lat * 180.0) / ((GCJ_A * (1 - GCJ_EE)) / (magic * sqrt_magic) * math.pi)
+    d_lng = (d_lng * 180.0) / ((GCJ_A / sqrt_magic) * math.cos(rad_lat) * math.pi)
+    return lng + d_lng, lat + d_lat
 
 
 def _request(params):

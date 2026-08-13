@@ -19,7 +19,8 @@ def tools_schema():
             "function": {
                 "name": "search_restaurants",
                 "description": (
-                    "搜索本地真实餐厅库（南京 25817 家，数据来自高德，含名称/区属/地址/评分）。"
+                    "搜索本地真实餐厅库（南京 25817 家，数据来自高德，含名称/区属/地址/评分/"
+                    "门店照片 photos/特色菜 tags/人均 cost/主图 image）。"
                     "推荐餐厅前必须先调用本工具，只从查询结果中挑选推荐。"
                 ),
                 "parameters": {

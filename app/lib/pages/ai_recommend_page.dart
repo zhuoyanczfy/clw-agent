@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../services/foodmap_api.dart';
@@ -94,18 +96,36 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     _scrollToBottom();
   }
 
-  /// 从 AI 回复中提取形如「店名（区）」的推荐，供一键收藏
+  /// 从 AI 回复中提取推荐餐厅：优先解析 ```json 卡片（含照片/评分/标签等），
+  /// 解析失败时回退正则「店名（区）」提取，供图文卡展示与一键收藏
   void _extractRecommendations(String reply) {
-    final regex = RegExp(
-      r'[「【】"]?\s*([\u4e00-\u9fa5A-Za-z0-9·&（）()]{2,20}?)\s*[」】"]?\s*(?:（|\(|【)([\u4e00-\u9fa5]{2,4}区)(?:）|\)|】)',
-    );
     final found = <Map<String, dynamic>>[];
-    for (final m in regex.allMatches(reply)) {
-      final name = m.group(1)!.trim();
-      final district = m.group(2)!.trim();
-      if (name.isEmpty || name.length > 16) continue;
-      if (found.any((f) => f['name'] == name)) continue;
-      found.add({'name': name, 'district': district});
+    final jsonBlock = RegExp(r'```json\s*([\s\S]*?)```');
+    for (final m in jsonBlock.allMatches(reply)) {
+      try {
+        final decoded = jsonDecode(m.group(1)!.trim());
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && item['name'] is String) {
+              found.add(_normalizeCard(item));
+            }
+          }
+        }
+      } catch (_) {
+        // 代码块非法 JSON，继续尝试下一个/回退正则
+      }
+    }
+    if (found.isEmpty) {
+      final regex = RegExp(
+        r'[「【】"]?\s*([\u4e00-\u9fa5A-Za-z0-9·&（）()]{2,20}?)\s*[」】"]?\s*(?:（|\(|【)([\u4e00-\u9fa5]{2,4}区)(?:）|\)|】)',
+      );
+      for (final m in regex.allMatches(reply)) {
+        final name = m.group(1)!.trim();
+        final district = m.group(2)!.trim();
+        if (name.isEmpty || name.length > 16) continue;
+        if (found.any((f) => f['name'] == name)) continue;
+        found.add({'name': name, 'district': district});
+      }
     }
     if (found.isEmpty) return;
     setState(() {
@@ -115,11 +135,41 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     });
   }
 
+  /// 卡片字段归一化：AI 输出可能缺字段或类型不定，统一成 UI 需要的格式
+  Map<String, dynamic> _normalizeCard(Map item) {
+    double? toDouble(dynamic v) {
+      final n = v is num ? v : double.tryParse(v?.toString() ?? '');
+      return n == null || n <= 0 ? null : n.toDouble();
+    }
+
+    final tags = <String>[];
+    for (final t in (item['tags'] as List?) ?? const []) {
+      final s = t.toString().trim();
+      if (s.isNotEmpty && !tags.contains(s)) tags.add(s);
+    }
+    return {
+      'name': (item['name'] ?? '').toString(),
+      'district': (item['district'] ?? '').toString(),
+      'reason': (item['reason'] ?? '').toString(),
+      'address': (item['address'] ?? '').toString(),
+      'amap_id': (item['amap_id'] ?? '').toString(),
+      'image': (item['image'] ?? '').toString(),
+      'rating': toDouble(item['rating']),
+      'per_capita': toDouble(item['per_capita']),
+      'tags': tags,
+    };
+  }
+
   Future<void> _collect(Map<String, dynamic> item) async {
     try {
       await FoodmapApi.addWishlist(
         name: item['name'] as String,
         district: (item['district'] as String?) ?? '',
+        amapId: (item['amap_id'] as String?)?.isNotEmpty == true
+            ? item['amap_id'] as String
+            : null,
+        perCapita: (item['per_capita'] as double?)?.round(),
+        reason: (item['reason'] as String?) ?? '',
         source: 'ai',
       );
       if (!mounted) return;
@@ -156,32 +206,21 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
       ),
       body: Column(
         children: [
-          // 推荐卡片（AI 回复中识别出的餐厅）
+          // 推荐卡片（AI 回复 json 卡片中解析出的餐厅，带图/评分/标签）
           if (_recommended.isNotEmpty)
             BouncyIn(
               offsetY: 0,
               duration: const Duration(milliseconds: 350),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
                 color: const Color(0xFFFFF3E0),
                 child: SizedBox(
-                  height: 46,
+                  height: 132,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     children: [
                       for (final item in _recommended)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ActionChip(
-                            avatar: const Icon(
-                              Icons.favorite,
-                              size: 16,
-                              color: AppTheme.primary,
-                            ),
-                            label: Text('${item['name']}'),
-                            onPressed: () => _collect(item),
-                          ),
-                        ),
+                        _recommendCard(item),
                     ],
                   ),
                 ),
@@ -257,6 +296,135 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 推荐图文卡：门店图 + 店名 + 评分/人均 + 特色菜标签，点击收藏
+  Widget _recommendCard(Map<String, dynamic> item) {
+    final image = (item['image'] ?? '').toString();
+    final rating = item['rating'] as double?;
+    final perCapita = item['per_capita'] as double?;
+    final tags = (item['tags'] as List?)?.cast<String>() ?? const <String>[];
+    final tagText = tags.take(3).join(' · ');
+    return GestureDetector(
+      onTap: () => _collect(item),
+      child: Container(
+        width: 150,
+        margin: const EdgeInsets.only(right: 10),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: 0.10),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 门店图（无图时优雅占位）
+            Stack(
+              children: [
+                SizedBox(
+                  height: 74,
+                  width: double.infinity,
+                  child: image.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: image,
+                          fit: BoxFit.cover,
+                          fadeInDuration: const Duration(milliseconds: 200),
+                          errorWidget: (_, _, _) => _imagePlaceholder(),
+                        )
+                      : _imagePlaceholder(),
+                ),
+                const Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Icon(
+                    Icons.favorite,
+                    size: 15,
+                    color: Colors.white,
+                    shadows: [Shadow(color: Colors.black26, blurRadius: 4)],
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 5, 8, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${item['name']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (rating != null) ...[
+                        const Icon(
+                          Icons.star,
+                          size: 11,
+                          color: Color(0xFFFF9F45),
+                        ),
+                        Text(
+                          ' $rating',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFE8823A),
+                          ),
+                        ),
+                      ],
+                      if (rating != null && perCapita != null)
+                        const SizedBox(width: 6),
+                      if (perCapita != null)
+                        Text(
+                          '人均¥${perCapita.round()}',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppTheme.textLight,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (tagText.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      tagText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFFB08FB8),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      color: const Color(0xFFFCE4EC),
+      child: const Center(
+        child: Icon(Icons.storefront, size: 26, color: Color(0xFFE0A3B8)),
       ),
     );
   }
