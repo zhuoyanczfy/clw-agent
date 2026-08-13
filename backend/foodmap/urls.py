@@ -10,6 +10,9 @@ urlpatterns = [
     path('api/dishes/', views.api_dishes, name='dishes'),
     path('api/dish/today/', views.api_dish_today, name='dish_today'),
     path('api/dish/<str:date>/', views.api_dish_by_date, name='dish_by_date'),
+    # 美食收藏
+    path('api/favorites/', views.api_favorites, name='favorites'),
+    path('api/favorites/<str:slug>/', views.api_favorite_delete, name='favorite_delete'),
     # 区与餐厅
     path('api/districts/', views.api_districts, name='districts'),
     path('api/districts.geojson', views.api_districts_geojson, name='districts_geojson'),

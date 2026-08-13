@@ -72,6 +72,27 @@ class Dish(models.Model):
         return self.name
 
 
+class FavoriteDish(models.Model):
+    """每日美食收藏：APP 内收藏想吃的菜（单用户，一道菜一条记录）。
+
+    旧版收藏存 APP 本地（SharedPreferences），本模型上云后 APP 启动时把
+    本地收藏迁到云端，后续云端为准、本地仅做离线缓存。
+    """
+
+    dish = models.OneToOneField(
+        Dish, on_delete=models.CASCADE, related_name='favorite', verbose_name='菜品'
+    )
+    created_at = models.DateTimeField('收藏时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '美食收藏'
+        verbose_name_plural = '美食收藏'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.dish.name
+
+
 class AppConfig(models.Model):
     """APP 云端配置：键值对，Admin 修改后 APP 启动自动拉取生效（无需重打包）。"""
 

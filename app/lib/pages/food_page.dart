@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/dish.dart';
 import '../services/dish_service.dart';
@@ -29,8 +28,8 @@ class _FoodPageState extends State<FoodPage> {
   Future<void> _load() async {
     final dish = await DishService.getTodayDish();
     final all = await DishService.fetchDishes();
-    final ids = await _loadFavoriteIds();
-    // 收藏列表从完整菜库匹配（云端优先，离线时用内置库）
+    final ids = await DishService.syncFavoriteIds();
+    // 收藏列表从完整菜库匹配（云端为准，离线时用本地缓存）
     final favDishes = <Dish>[];
     for (final id in ids) {
       final match = all.where((d) => d.id == id);
@@ -45,20 +44,8 @@ class _FoodPageState extends State<FoodPage> {
     });
   }
 
-  Future<List<String>> _loadFavoriteIds() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (prefs.getStringList('favorite_dish_ids') ?? []);
-  }
-
   Future<void> _toggleFavorite(Dish dish) async {
-    final prefs = await SharedPreferences.getInstance();
-    final ids = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
-    if (ids.contains(dish.id)) {
-      ids.remove(dish.id);
-    } else {
-      ids.add(dish.id);
-    }
-    await prefs.setStringList('favorite_dish_ids', ids);
+    await DishService.toggleFavorite(dish.id);
     await _load();
   }
 

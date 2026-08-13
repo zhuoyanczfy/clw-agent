@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/dishes.dart';
 import '../models/dish.dart';
@@ -63,6 +64,91 @@ class DishService {
     final hex = digest.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     final seed = int.parse(hex.substring(0, 8), radix: 16);
     return builtinDishes[seed % builtinDishes.length];
+  }
+
+  // ---------- 收藏（云端为准，本地缓存兜底） ----------
+
+  /// 同步收藏列表：云端有值以云端为准并更新本地缓存；
+  /// 云端为空而本地有收藏时，把旧版本地收藏迁移到云端（换机/升级不丢收藏）。
+  static Future<List<String>> syncFavoriteIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final localIds = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isNotEmpty) {
+      try {
+        final resp = await http
+            .get(Uri.parse('$base/api/favorites/'))
+            .timeout(const Duration(seconds: 5));
+        if (resp.statusCode == 200) {
+          final json = jsonDecode(utf8.decode(resp.bodyBytes));
+          final list = json['favorites'] as List<dynamic>? ?? [];
+          final remoteIds = list
+              .map((e) => ((e as Map<String, dynamic>)['id'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          if (remoteIds.isEmpty && localIds.isNotEmpty) {
+            // 云端还没有收藏：把本地收藏迁上去
+            for (final id in localIds) {
+              await _pushFavorite(base, id);
+            }
+            await prefs.setStringList('favorite_dish_ids', localIds);
+            return localIds;
+          }
+          await prefs.setStringList('favorite_dish_ids', remoteIds);
+          return remoteIds;
+        }
+      } catch (_) {
+        // 云端不可用，用本地缓存
+      }
+    }
+    return localIds;
+  }
+
+  /// 收藏/取消收藏：本地立即生效，云端尽力同步（失败不阻断本地操作）。
+  static Future<bool> toggleFavorite(String slug) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
+    final adding = !ids.contains(slug);
+    if (adding) {
+      ids.add(slug);
+    } else {
+      ids.remove(slug);
+    }
+    await prefs.setStringList('favorite_dish_ids', ids);
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isNotEmpty) {
+      try {
+        final resp = adding
+            ? await http
+                .post(
+                  Uri.parse('$base/api/favorites/'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({'slug': slug}),
+                )
+                .timeout(const Duration(seconds: 5))
+            : await http
+                .delete(Uri.parse('$base/api/favorites/$slug/'))
+                .timeout(const Duration(seconds: 5));
+        return resp.statusCode == 200;
+      } catch (_) {
+        // 云端失败不阻断本地收藏
+      }
+    }
+    return true;
+  }
+
+  static Future<void> _pushFavorite(String base, String slug) async {
+    try {
+      await http
+          .post(
+            Uri.parse('$base/api/favorites/'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'slug': slug}),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // 迁移失败静默，下次启动再试
+    }
   }
 
   static String _dateString(DateTime t) =>

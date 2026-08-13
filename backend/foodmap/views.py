@@ -17,6 +17,7 @@ from .models import (
     DiningRecordPhoto,
     Dish,
     District,
+    FavoriteDish,
     Restaurant,
     SplashImage,
     SplashState,
@@ -93,6 +94,39 @@ def api_dish_by_date(request, date):
     return JsonResponse(
         {'date': date, 'dish': _dish_json(dish) if dish else None}
     )
+
+
+# ============ 美食收藏 ============
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_favorites(request):
+    """收藏的菜：GET 列表（按收藏时间倒序）；POST 添加，body {"slug": "tomato-beef"}。"""
+    if request.method == 'GET':
+        favs = FavoriteDish.objects.select_related('dish').order_by('-created_at')
+        return JsonResponse({'favorites': [_dish_json(f.dish) for f in favs]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    slug = (data.get('slug') or '').strip()
+    if not slug:
+        return JsonResponse({'error': '缺少菜品标识 slug'}, status=400)
+    dish = Dish.objects.filter(slug=slug, enabled=True).first()
+    if not dish:
+        return JsonResponse({'error': '菜品不存在'}, status=404)
+    FavoriteDish.objects.get_or_create(dish=dish)
+    return JsonResponse({'ok': True})
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_favorite_delete(request, slug):
+    """取消收藏，slug 形如 tomato-beef。"""
+    FavoriteDish.objects.filter(dish__slug=slug).delete()
+    return JsonResponse({'ok': True})
 
 
 # ============ 区与餐厅 ============

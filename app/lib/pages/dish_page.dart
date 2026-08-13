@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/dish.dart';
+import '../services/dish_service.dart';
 import '../theme.dart';
 
 /// 美食详情页：大图 + 专属文案 + 做法 + 收藏
@@ -25,21 +25,13 @@ class _DishPageState extends State<DishPage> {
   }
 
   Future<void> _checkFavorite() async {
-    final prefs = await SharedPreferences.getInstance();
-    final ids = prefs.getStringList('favorite_dish_ids') ?? [];
+    final ids = await DishService.syncFavoriteIds();
     if (!mounted) return;
     setState(() => _isFavorite = ids.contains(widget.dish.id));
   }
 
   Future<void> _toggleFavorite() async {
-    final prefs = await SharedPreferences.getInstance();
-    final ids = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
-    if (ids.contains(widget.dish.id)) {
-      ids.remove(widget.dish.id);
-    } else {
-      ids.add(widget.dish.id);
-    }
-    await prefs.setStringList('favorite_dish_ids', ids);
+    await DishService.toggleFavorite(widget.dish.id);
     if (!mounted) return;
     setState(() => _isFavorite = !_isFavorite);
     ScaffoldMessenger.of(context).showSnackBar(

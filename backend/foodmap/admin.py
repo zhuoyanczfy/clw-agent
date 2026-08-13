@@ -5,6 +5,7 @@ from .models import (
     DiningRecord,
     Dish,
     District,
+    FavoriteDish,
     Restaurant,
     SplashImage,
     WishlistItem,
@@ -23,6 +24,14 @@ class DishAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description='内容完整')
     def has_content(self, obj):
         return bool(obj.description and obj.ingredients and obj.steps and obj.image_url)
+
+
+@admin.register(FavoriteDish)
+class FavoriteDishAdmin(admin.ModelAdmin):
+    """美食收藏（单用户）：APP 收藏的菜，云端为准。"""
+
+    list_display = ('dish', 'created_at')
+    search_fields = ('dish__name',)
 
 
 @admin.register(District)
