@@ -6,6 +6,9 @@ from .models import (
     Dish,
     District,
     FavoriteDish,
+    Pet,
+    PetEvent,
+    PetPhoto,
     Restaurant,
     SplashImage,
     WishlistItem,
@@ -32,6 +35,29 @@ class FavoriteDishAdmin(admin.ModelAdmin):
 
     list_display = ('dish', 'created_at')
     search_fields = ('dish__name',)
+
+
+class PetEventInline(admin.TabularInline):
+    model = PetEvent
+    extra = 0
+    fields = ('kind', 'title', 'date', 'due_date', 'weight', 'note')
+    show_change_link = True
+
+
+class PetPhotoInline(admin.TabularInline):
+    model = PetPhoto
+    extra = 0
+    fields = ('image', 'caption')
+    show_change_link = True
+
+
+@admin.register(Pet)
+class PetAdmin(admin.ModelAdmin):
+    """宠物档案（猫咪名片）。"""
+
+    list_display = ('name', 'breed', 'gender', 'birthday', 'adopt_date')
+    search_fields = ('name', 'breed')
+    inlines = [PetPhotoInline, PetEventInline]
 
 
 @admin.register(District)

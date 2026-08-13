@@ -18,6 +18,9 @@ from .models import (
     Dish,
     District,
     FavoriteDish,
+    Pet,
+    PetEvent,
+    PetPhoto,
     Restaurant,
     SplashImage,
     SplashState,
@@ -474,6 +477,225 @@ def api_wishlist_delete(request, item_id):
     """删除待尝项。"""
     item = get_object_or_404(WishlistItem, pk=item_id)
     item.delete()
+    return JsonResponse({'ok': True})
+
+
+# ============ 宠物名片 ============
+
+
+def _parse_date(value):
+    """解析 YYYY-MM-DD，空串/非法返回 None。"""
+    import datetime
+
+    s = (value or '').strip()
+    if not s:
+        return None
+    try:
+        return datetime.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _pet_json(p):
+    return {
+        'id': p.pk,
+        'name': p.name,
+        'breed': p.breed,
+        'gender': p.gender,
+        'birthday': p.birthday.isoformat() if p.birthday else '',
+        'adopt_date': p.adopt_date.isoformat() if p.adopt_date else '',
+        'avatar': p.avatar.url if p.avatar else '',
+        'notes': p.notes,
+    }
+
+
+def _pet_photo_json(ph):
+    return {
+        'id': ph.pk,
+        'image': ph.image.url,
+        'caption': ph.caption,
+        'created_at': ph.created_at.strftime('%Y-%m-%d'),
+    }
+
+
+def _pet_event_json(e):
+    return {
+        'id': e.pk,
+        'kind': e.kind,
+        'title': e.title,
+        'date': e.date.isoformat(),
+        'due_date': e.due_date.isoformat() if e.due_date else '',
+        'weight': e.weight,
+        'note': e.note,
+    }
+
+
+def _clean_image(field, f, label):
+    """校验上传图片，失败返回错误信息字符串，成功返回 None。"""
+    try:
+        field.clean(f)
+    except forms.ValidationError as exc:
+        return f'{label}「{f.name}」无效：{exc}'
+    return None
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_pets(request):
+    """宠物列表或创建（POST multipart：name 必填，avatar 图片可选）。"""
+    if request.method == 'GET':
+        pets = Pet.objects.all()
+        return JsonResponse({'pets': [_pet_json(p) for p in pets]})
+
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': '宠物名字不能为空'}, status=400)
+    avatar = request.FILES.get('avatar')
+    if avatar:
+        err = _clean_image(forms.ImageField(), avatar, '头像')
+        if err:
+            return JsonResponse({'error': err}, status=400)
+    pet = Pet.objects.create(
+        name=name[:30],
+        breed=(request.POST.get('breed') or '').strip()[:50],
+        gender=(request.POST.get('gender') or '').strip()[:10],
+        birthday=_parse_date(request.POST.get('birthday')),
+        adopt_date=_parse_date(request.POST.get('adopt_date')),
+        avatar=avatar,
+        notes=(request.POST.get('notes') or '').strip(),
+    )
+    return JsonResponse({'ok': True, 'pet': _pet_json(pet)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'DELETE'])
+def api_pet_detail(request, pet_id):
+    """宠物档案更新（POST multipart 全字段，含头像）或删除（含磁盘文件清理）。
+
+    注意：不用 PUT——Django 只在 POST 时解析 multipart 表单，PUT 取不到字段与文件。
+    """
+    pet = get_object_or_404(Pet, pk=pet_id)
+    if request.method == 'DELETE':
+        old_avatar = pet.avatar.path if pet.avatar else None
+        photo_paths = [p.image.path for p in pet.photos.all()]
+        pet.delete()
+        for path in ([old_avatar] + photo_paths):
+            if path:
+                try:
+                    os.remove(path)
+                except (FileNotFoundError, OSError):
+                    pass
+        return JsonResponse({'ok': True})
+
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': '宠物名字不能为空'}, status=400)
+    avatar = request.FILES.get('avatar')
+    if avatar:
+        err = _clean_image(forms.ImageField(), avatar, '头像')
+        if err:
+            return JsonResponse({'error': err}, status=400)
+    pet.name = name[:30]
+    pet.breed = (request.POST.get('breed') or '').strip()[:50]
+    pet.gender = (request.POST.get('gender') or '').strip()[:10]
+    pet.birthday = _parse_date(request.POST.get('birthday'))
+    pet.adopt_date = _parse_date(request.POST.get('adopt_date'))
+    pet.notes = (request.POST.get('notes') or '').strip()
+    if avatar:
+        old = pet.avatar
+        if old:
+            # 先删旧文件再换新。注意 FieldFile.delete 会把实例内存字段置 None，
+            # 因此必须先删旧、后赋值保存，否则响应里 avatar 会是空的。
+            old.delete(save=False)
+        pet.avatar = avatar
+        pet.save()
+    else:
+        pet.save()
+    return JsonResponse({'ok': True, 'pet': _pet_json(pet)})
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_pet_photos(request, pet_id):
+    """宠物照片列表或上传（POST multipart，字段名 images 可多张，caption 可选）。"""
+    pet = get_object_or_404(Pet, pk=pet_id)
+    if request.method == 'GET':
+        return JsonResponse({'photos': [_pet_photo_json(p) for p in pet.photos.all()]})
+
+    photo_field = forms.ImageField()
+    caption = (request.POST.get('caption') or '').strip()[:100]
+    saved = []
+    for f in request.FILES.getlist('images'):
+        err = _clean_image(photo_field, f, '照片')
+        if err:
+            return JsonResponse({'error': err}, status=400)
+        saved.append(PetPhoto.objects.create(pet=pet, image=f, caption=caption))
+    if not saved:
+        return JsonResponse({'error': '缺少图片字段 images'}, status=400)
+    return JsonResponse(
+        {'ok': True, 'photos': [_pet_photo_json(p) for p in saved]}, status=201
+    )
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_pet_photo_delete(request, photo_id):
+    """删除单张宠物照片（数据库行 + 磁盘文件）。"""
+    photo = get_object_or_404(PetPhoto, pk=photo_id)
+    path = photo.image.path
+    photo.delete()
+    try:
+        os.remove(path)
+    except (FileNotFoundError, OSError):
+        pass
+    return JsonResponse({'ok': True})
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_pet_events(request, pet_id):
+    """宠物事项列表或添加（POST JSON：kind/title/date 必填，due_date/weight/note 可选）。"""
+    pet = get_object_or_404(Pet, pk=pet_id)
+    if request.method == 'GET':
+        return JsonResponse({'events': [_pet_event_json(e) for e in pet.events.all()]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    kind = (data.get('kind') or '').strip()
+    if kind not in dict(PetEvent.KIND_CHOICES):
+        return JsonResponse({'error': '事项类型无效'}, status=400)
+    title = (data.get('title') or '').strip()
+    date = _parse_date(data.get('date'))
+    if not title or not date:
+        return JsonResponse({'error': '标题与日期必填'}, status=400)
+    weight = None
+    if kind == 'weight':
+        try:
+            weight = float(data.get('weight') or '')
+        except (TypeError, ValueError):
+            return JsonResponse({'error': '体重数字无效'}, status=400)
+        if weight <= 0:
+            return JsonResponse({'error': '体重数字无效'}, status=400)
+    event = PetEvent.objects.create(
+        pet=pet,
+        kind=kind,
+        title=title[:100],
+        date=date,
+        due_date=_parse_date(data.get('due_date')),
+        weight=weight,
+        note=(data.get('note') or '').strip(),
+    )
+    return JsonResponse({'ok': True, 'event': _pet_event_json(event)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_pet_event_delete(request, event_id):
+    """删除一条宠物事项。"""
+    event = get_object_or_404(PetEvent, pk=event_id)
+    event.delete()
     return JsonResponse({'ok': True})
 
 

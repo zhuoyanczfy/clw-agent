@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/dining_record.dart';
 import '../models/district.dart';
+import '../models/pet.dart';
 import '../models/restaurant.dart';
 import '../models/splash_image.dart';
 import '../models/wishlist_item.dart';
@@ -281,6 +282,142 @@ class FoodmapApi {
     final json = await _postJson('/api/recommend/verify/', {'items': items}) as Map<String, dynamic>;
     return (json['items'] as List).cast<Map<String, dynamic>>();
   }
+
+  // ---------- 宠物名片 ----------
+
+  /// 宠物列表（单用户场景通常 0 或 1 条）
+  static Future<List<Pet>> fetchPets() async {
+    final json = await _getJson('/api/pets/') as Map<String, dynamic>;
+    return (json['pets'] as List)
+        .map((e) => Pet.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 创建宠物档案（multipart，avatar 可选）
+  static Future<Pet> createPet({
+    required String name,
+    String breed = '',
+    String gender = '',
+    String birthday = '',
+    String adoptDate = '',
+    String notes = '',
+    String? avatarPath,
+  }) async {
+    final base = await _base();
+    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
+    final request = http.MultipartRequest('POST', _uri(base, '/api/pets/'))
+      ..fields['name'] = name
+      ..fields['breed'] = breed
+      ..fields['gender'] = gender
+      ..fields['birthday'] = birthday
+      ..fields['adopt_date'] = adoptDate
+      ..fields['notes'] = notes;
+    if (avatarPath != null) {
+      request.files.add(await http.MultipartFile.fromPath('avatar', avatarPath));
+    }
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode >= 300) _throw(resp);
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    return Pet.fromJson(json['pet'] as Map<String, dynamic>);
+  }
+
+  /// 更新宠物档案（multipart 全字段；avatarPath 传 null 表示不换头像）
+  static Future<Pet> updatePet(
+    int id, {
+    required String name,
+    String breed = '',
+    String gender = '',
+    String birthday = '',
+    String adoptDate = '',
+    String notes = '',
+    String? avatarPath,
+  }) async {
+    final base = await _base();
+    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
+    final request = http.MultipartRequest('POST', _uri(base, '/api/pets/$id/'))
+      ..fields['name'] = name
+      ..fields['breed'] = breed
+      ..fields['gender'] = gender
+      ..fields['birthday'] = birthday
+      ..fields['adopt_date'] = adoptDate
+      ..fields['notes'] = notes;
+    if (avatarPath != null) {
+      request.files.add(await http.MultipartFile.fromPath('avatar', avatarPath));
+    }
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode >= 300) _throw(resp);
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    return Pet.fromJson(json['pet'] as Map<String, dynamic>);
+  }
+
+  static Future<void> deletePet(int id) => _deleteJson('/api/pets/$id/');
+
+  /// 宠物照片列表
+  static Future<List<PetPhoto>> fetchPetPhotos(int petId) async {
+    final json = await _getJson('/api/pets/$petId/photos/') as Map<String, dynamic>;
+    return (json['photos'] as List)
+        .map((e) => PetPhoto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 上传宠物照片（multipart，可多张，caption 可选）
+  static Future<List<PetPhoto>> uploadPetPhotos(
+    int petId,
+    List<String> filePaths, {
+    String caption = '',
+  }) async {
+    final base = await _base();
+    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
+    final request = http.MultipartRequest('POST', _uri(base, '/api/pets/$petId/photos/'))
+      ..fields['caption'] = caption;
+    for (final path in filePaths) {
+      request.files.add(await http.MultipartFile.fromPath('images', path));
+    }
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode >= 300) _throw(resp);
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    return (json['photos'] as List)
+        .map((e) => PetPhoto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  static Future<void> deletePetPhoto(int photoId) =>
+      _deleteJson('/api/pets/photos/$photoId/');
+
+  /// 宠物事项列表（按日期倒序）
+  static Future<List<PetEvent>> fetchPetEvents(int petId) async {
+    final json = await _getJson('/api/pets/$petId/events/') as Map<String, dynamic>;
+    return (json['events'] as List)
+        .map((e) => PetEvent.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 添加宠物事项
+  static Future<PetEvent> addPetEvent(
+    int petId, {
+    required String kind,
+    required String title,
+    required String date,
+    String dueDate = '',
+    double? weight,
+    String note = '',
+  }) async {
+    final json = await _postJson('/api/pets/$petId/events/', {
+      'kind': kind,
+      'title': title,
+      'date': date,
+      if (dueDate.isNotEmpty) 'due_date': dueDate,
+      'weight': ?weight,
+      'note': note,
+    }) as Map<String, dynamic>;
+    return PetEvent.fromJson(json['event'] as Map<String, dynamic>);
+  }
+
+  static Future<void> deletePetEvent(int eventId) =>
+      _deleteJson('/api/pets/events/$eventId/');
 
   // ---------- AI 推荐官（SSE 流式聊天） ----------
 

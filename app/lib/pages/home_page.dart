@@ -2,11 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/dish.dart';
+import '../models/pet.dart';
 import '../services/dish_service.dart';
+import '../services/foodmap_api.dart';
 import '../services/remote_config.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
+import 'pet_page.dart';
 
 /// 首页：专属问候 + 认识天数 + 今日美食卡片 + 提醒状态（文案由后台配置）
 class HomePage extends StatefulWidget {
@@ -18,6 +21,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   Dish? _todayDish;
+  Pet? _pet;
 
   @override
   void initState() {
@@ -26,9 +30,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _load() async {
-    final dish = await DishService.getTodayDish();
+    final results = await Future.wait([
+      DishService.getTodayDish(),
+      FoodmapApi.fetchPets().catchError((_) => <Pet>[]),
+    ]);
     if (!mounted) return;
-    setState(() => _todayDish = dish);
+    setState(() {
+      _todayDish = results[0] as Dish?;
+      final pets = results[1] as List<Pet>;
+      _pet = pets.isEmpty ? null : pets.first;
+    });
   }
 
   @override
@@ -46,6 +57,8 @@ class _HomePageState extends State<HomePage> {
                 _buildGreeting(),
                 const SizedBox(height: 20),
                 _buildDaysCard(),
+                const SizedBox(height: 20),
+                _buildPetCard(),
                 const SizedBox(height: 20),
                 _buildTodayDishCard(),
                 const SizedBox(height: 20),
@@ -320,6 +333,76 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => DishPage(dish: dish)));
+  }
+
+  void _openPet() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PetPage())).then((_) => _load());
+  }
+
+  // ---- 猫咪名片入口卡片 ----
+  Widget _buildPetCard() {
+    final pet = _pet;
+    return BouncyIn(
+      offsetY: 20,
+      delay: const Duration(milliseconds: 100),
+      child: Card(
+        child: SquishyTap(
+          onTap: _openPet,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFE9E9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Text('🐱', style: TextStyle(fontSize: 22)),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pet == null ? '猫咪名片' : '${pet.name} 的猫咪名片',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        pet == null
+                            ? '记录生日、疫苗、驱虫和成长照片'
+                            : [
+                                if (pet.ageText.isNotEmpty) pet.ageText,
+                                if (pet.companionDays != null)
+                                  '已相伴 ${pet.companionDays} 天',
+                              ].join(' · '),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppTheme.textLight),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ---- 提醒状态卡片（状态由后台配置） ----

@@ -75,6 +75,89 @@ class Dish(models.Model):
         return self.name
 
 
+class Pet(models.Model):
+    """宠物档案（猫咪名片）：生日、领养纪念日、品种等基本信息。
+
+    单用户设计（为她家的猫定制），但模型支持多条，UI 按单猫直进详情。
+    """
+
+    GENDER_CHOICES = [
+        ('male', '公'),
+        ('female', '母'),
+    ]
+
+    name = models.CharField('名字', max_length=30)
+    breed = models.CharField('品种', max_length=50, blank=True)
+    gender = models.CharField('性别', max_length=10, choices=GENDER_CHOICES, blank=True)
+    birthday = models.DateField('生日', null=True, blank=True)
+    adopt_date = models.DateField('来家纪念日', null=True, blank=True)
+    avatar = models.ImageField('头像', upload_to='pet_avatars/', null=True, blank=True)
+    notes = models.TextField('备注', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '宠物档案'
+        verbose_name_plural = '宠物档案'
+        ordering = ['id']
+
+    def __str__(self):
+        return self.name
+
+
+class PetPhoto(models.Model):
+    """宠物照片（成长相册），一张宠物可上传多张。"""
+
+    pet = models.ForeignKey(
+        Pet, on_delete=models.CASCADE, related_name='photos', verbose_name='宠物'
+    )
+    image = models.ImageField('照片', upload_to='pet_photos/%Y/%m/')
+    caption = models.CharField('说明', max_length=100, blank=True)
+    created_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '宠物照片'
+        verbose_name_plural = '宠物照片'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.pet.name} 的照片 #{self.pk}'
+
+
+class PetEvent(models.Model):
+    """宠物事项记录：疫苗 / 驱虫 / 体重 / 其他（绝育、体检等）。
+
+    due_date 记录下次到期时间（疫苗、驱虫），APP 到期前 7 天本地通知提醒。
+    weight 仅 kind=weight 时使用（单位 kg）。
+    """
+
+    KIND_CHOICES = [
+        ('vaccine', '疫苗'),
+        ('deworm', '驱虫'),
+        ('weight', '体重'),
+        ('other', '其他'),
+    ]
+
+    pet = models.ForeignKey(
+        Pet, on_delete=models.CASCADE, related_name='events', verbose_name='宠物'
+    )
+    kind = models.CharField('类型', max_length=10, choices=KIND_CHOICES)
+    title = models.CharField('标题', max_length=100)
+    date = models.DateField('日期')
+    due_date = models.DateField('下次到期', null=True, blank=True)
+    weight = models.FloatField('体重(kg)', null=True, blank=True)
+    note = models.TextField('备注', blank=True)
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '宠物事项'
+        verbose_name_plural = '宠物事项'
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f'{self.pet.name} · {self.get_kind_display()} · {self.title}'
+
+
 class FavoriteDish(models.Model):
     """每日美食收藏：APP 内收藏想吃的菜（单用户，一道菜一条记录）。
 

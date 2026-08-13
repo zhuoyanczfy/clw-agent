@@ -2,6 +2,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../models/pet.dart';
 import 'dish_service.dart';
 import 'remote_config.dart';
 
@@ -16,6 +17,10 @@ class NotificationService {
   static const int _waterBaseId = 100;
   static const int _nightId = 200;
   static const int _dishId = 300;
+  static const int _petBaseId = 400;
+
+  /// 已调度提醒的宠物事项 id（重新调度时用于取消被删除/改期的事项）
+  static final Set<int> _scheduledPetEventIds = <int>{};
 
   static const _channelId = 'daily_reminders';
   static const _channelName = '每日关怀提醒';
@@ -78,6 +83,52 @@ class NotificationService {
         minute: RemoteConfig.dishTime.minute,
       );
     }
+  }
+
+  /// 调度宠物疫苗/驱虫到期提醒：到期前 7 天上午 10 点单次通知。
+  /// 会取消已删除事项的旧提醒；到期日已过或未设到期时间的不调度。
+  static Future<void> schedulePetReminders(List<PetEvent> events) async {
+    final now = tz.TZDateTime.now(tz.local);
+    final active = <int>{};
+    for (final e in events) {
+      if (e.kind != PetEvent.kindVaccine && e.kind != PetEvent.kindDeworm) {
+        continue;
+      }
+      final due = DateTime.tryParse(e.dueDate);
+      if (due == null) continue;
+      final remindAt = tz.TZDateTime(
+        tz.local,
+        due.year,
+        due.month,
+        due.day,
+        10,
+      ).subtract(const Duration(days: 7));
+      if (!remindAt.isAfter(now)) continue;
+      active.add(e.id);
+      await _plugin.zonedSchedule(
+        _petBaseId + e.id,
+        '🐾 猫咪健康提醒',
+        '${e.title} 还有 7 天到期（${e.dueDate}），记得带猫咪预约哦',
+        remindAt,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: '每日定时关怀提醒',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
+    // 取消已不存在（被删除或改了到期时间）的旧提醒
+    for (final id in _scheduledPetEventIds.difference(active)) {
+      await _plugin.cancel(_petBaseId + id);
+    }
+    _scheduledPetEventIds
+      ..clear()
+      ..addAll(active);
   }
 
   /// 每天固定时间重复调度

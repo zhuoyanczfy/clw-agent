@@ -27,6 +27,13 @@ urlpatterns = [
     path('api/wishlist/', views.api_wishlist, name='wishlist'),
     path('api/wishlist/<int:item_id>/eaten/', views.api_wishlist_eaten, name='wishlist_eaten'),
     path('api/wishlist/<int:item_id>/', views.api_wishlist_delete, name='wishlist_delete'),
+    # 宠物名片
+    path('api/pets/', views.api_pets, name='pets'),
+    path('api/pets/<int:pet_id>/', views.api_pet_detail, name='pet_detail'),
+    path('api/pets/<int:pet_id>/photos/', views.api_pet_photos, name='pet_photos'),
+    path('api/pets/photos/<int:photo_id>/', views.api_pet_photo_delete, name='pet_photo_delete'),
+    path('api/pets/<int:pet_id>/events/', views.api_pet_events, name='pet_events'),
+    path('api/pets/events/<int:event_id>/', views.api_pet_event_delete, name='pet_event_delete'),
     # AI 智能推荐
     path('api/recommend/chat/', views.api_chat, name='recommend_chat'),
     path('api/recommend/verify/', views.api_recommend_verify, name='recommend_verify'),
