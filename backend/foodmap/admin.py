@@ -1,6 +1,28 @@
 from django.contrib import admin
 
-from .models import AppConfig, DiningRecord, District, Restaurant, SplashImage, WishlistItem
+from .models import (
+    AppConfig,
+    DiningRecord,
+    Dish,
+    District,
+    Restaurant,
+    SplashImage,
+    WishlistItem,
+)
+
+
+@admin.register(Dish)
+class DishAdmin(admin.ModelAdmin):
+    """每日美食库：改完 APP 下次拉取即生效，无需重新打包。"""
+
+    list_display = ('name', 'category', 'enabled', 'sort', 'has_content')
+    list_filter = ('category', 'enabled')
+    search_fields = ('name', 'description')
+    list_editable = ('enabled', 'sort')
+
+    @admin.display(boolean=True, description='内容完整')
+    def has_content(self, obj):
+        return bool(obj.description and obj.ingredients and obj.steps and obj.image_url)
 
 
 @admin.register(District)

@@ -11,11 +11,11 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .dishes_data import DISHES, dish_for_date
 from .models import (
     AppConfig,
     DiningRecord,
     DiningRecordPhoto,
+    Dish,
     District,
     Restaurant,
     SplashImage,
@@ -37,26 +37,62 @@ def api_health(request):
     return JsonResponse({'ok': True, 'service': 'clw-agent backend'})
 
 
+def _dish_json(d):
+    """菜品序列化（与 APP Dish.fromJson 字段对应）。"""
+    return {
+        'id': d.slug,
+        'name': d.name,
+        'category': d.category,
+        'description': d.description,
+        'ingredients': d.ingredients,
+        'steps': d.steps,
+        'image_url': d.image_url,
+    }
+
+
+def dish_for_date(date_str):
+    """按日期从数据库菜库取一道菜（md5(日期) 取模，与 APP 内置算法一致）。"""
+    import hashlib
+
+    dishes = list(Dish.objects.filter(enabled=True).order_by('sort', 'id'))
+    if not dishes:
+        return None
+    seed = int(hashlib.md5(date_str.encode()).hexdigest()[:8], 16)
+    return dishes[seed % len(dishes)]
+
+
 def api_dishes(request):
-    """全部菜品（每日推荐数据源）。"""
-    return JsonResponse({'total': len(DISHES), 'dishes': DISHES})
+    """全部启用菜品（每日推荐数据源）。"""
+    dishes = [
+        _dish_json(d)
+        for d in Dish.objects.filter(enabled=True).order_by('sort', 'id')
+    ]
+    return JsonResponse({'total': len(dishes), 'dishes': dishes})
 
 
 def api_dish_today(request):
     """今日推荐（与 APP 内置算法一致：md5(日期) 取模）。"""
     import datetime
+
     today = datetime.date.today().isoformat()
-    return JsonResponse({'date': today, 'dish': dish_for_date(today)})
+    dish = dish_for_date(today)
+    return JsonResponse(
+        {'date': today, 'dish': _dish_json(dish) if dish else None}
+    )
 
 
 def api_dish_by_date(request, date):
     """指定日期的推荐，date 形如 2026-08-10。"""
     import datetime
+
     try:
         datetime.date.fromisoformat(date)
     except ValueError:
         return JsonResponse({'error': '日期格式错误，应为 YYYY-MM-DD'}, status=400)
-    return JsonResponse({'date': date, 'dish': dish_for_date(date)})
+    dish = dish_for_date(date)
+    return JsonResponse(
+        {'date': date, 'dish': _dish_json(dish) if dish else None}
+    )
 
 
 # ============ 区与餐厅 ============

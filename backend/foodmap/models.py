@@ -46,6 +46,32 @@ class Restaurant(models.Model):
         return self.records.order_by('-date').first()
 
 
+class Dish(models.Model):
+    """每日美食库：菜名、菜系、专属文案、材料用量、制作方法与成品图。
+
+    slug 对应旧内置库的 id（如 tomato-beef），APP 收藏按 slug 存储，迁移后保持稳定。
+    ingredients / steps 每行一条，APP 端按行渲染。
+    """
+
+    slug = models.SlugField('标识', max_length=50, unique=True)
+    name = models.CharField('菜名', max_length=50)
+    category = models.CharField('菜系/分类', max_length=20, db_index=True)
+    description = models.TextField('专属文案', blank=True)
+    ingredients = models.TextField('材料用量', blank=True, help_text='每行一条，如「牛腩 500 克」')
+    steps = models.TextField('制作方法', blank=True, help_text='每行一步')
+    image_url = models.URLField('成品图', max_length=500, blank=True)
+    sort = models.IntegerField('排序', default=0, help_text='数字越小越靠前，决定每日轮换顺序')
+    enabled = models.BooleanField('启用', default=True)
+
+    class Meta:
+        verbose_name = '每日美食'
+        verbose_name_plural = '每日美食'
+        ordering = ['sort', 'id']
+
+    def __str__(self):
+        return self.name
+
+
 class AppConfig(models.Model):
     """APP 云端配置：键值对，Admin 修改后 APP 启动自动拉取生效（无需重打包）。"""
 

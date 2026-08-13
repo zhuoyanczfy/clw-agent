@@ -147,25 +147,112 @@ class _DishPageState extends State<DishPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _sectionTitle('做法小抄'),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7F3),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFFFE0D6)),
-                      ),
-                      child: Text(
-                        dish.recipe,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textDark,
-                          height: 1.7,
+                    if (dish.hasDetail) ...[
+                      _sectionTitle('材料清单'),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7F3),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: dish.ingredients
+                              .map((line) => Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 2),
+                                    child: Text(
+                                      '· $line',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: AppTheme.textDark,
+                                        height: 1.7,
+                                      ),
+                                    ),
+                                  ))
+                              .toList(),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 24),
+                      _sectionTitle('制作步骤'),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7F3),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var i = 0; i < dish.steps.length; i++)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 22,
+                                      height: 22,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        '${i + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        dish.steps[i],
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: AppTheme.textDark,
+                                          height: 1.7,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      _sectionTitle('做法小抄'),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7F3),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                        ),
+                        child: Text(
+                          dish.recipe,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textDark,
+                            height: 1.7,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     Center(
                       child: FilledButton.icon(

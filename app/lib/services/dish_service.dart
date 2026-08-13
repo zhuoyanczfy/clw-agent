@@ -34,6 +34,29 @@ class DishService {
     return _fromBuiltin(dateStr);
   }
 
+  /// 获取全部菜库（云端优先，失败或未配置时回退内置库）
+  static Future<List<Dish>> fetchDishes() async {
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isNotEmpty) {
+      try {
+        final resp = await http
+            .get(Uri.parse('$base/api/dishes/'))
+            .timeout(const Duration(seconds: 5));
+        if (resp.statusCode == 200) {
+          final json = jsonDecode(utf8.decode(resp.bodyBytes));
+          final list = json['dishes'] as List<dynamic>;
+          final dishes = list
+              .map((e) => Dish.fromJson(e as Map<String, dynamic>))
+              .toList();
+          if (dishes.isNotEmpty) return dishes;
+        }
+      } catch (_) {
+        // 网络失败，走内置库兜底
+      }
+    }
+    return builtinDishes;
+  }
+
   /// 按日期从内置库取（与后端 dish_for_date 算法一致）
   static Dish _fromBuiltin(String dateStr) {
     final digest = crypto.md5.convert(utf8.encode(dateStr)).bytes;
