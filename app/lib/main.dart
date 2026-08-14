@@ -7,6 +7,7 @@ import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/splash_page.dart';
 import 'services/notification_service.dart';
+import 'services/quote_push_service.dart';
 import 'services/remote_config.dart';
 import 'theme.dart';
 import 'widgets/cute_widgets.dart';
@@ -69,6 +70,12 @@ class _RootState extends State<_Root> {
       await NotificationService.rescheduleAll();
     } catch (_) {
       // 通知调度失败不影响使用
+    }
+    // 好句定时推送：每日随机时间点（6:00~22:00）
+    try {
+      await QuotePushService.scheduleToday();
+    } catch (_) {
+      // 好句推送调度失败不影响使用
     }
   }
 

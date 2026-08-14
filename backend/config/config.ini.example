@@ -12,6 +12,9 @@ API_TOKEN=clw-api-8f3k2j9h4g5d6s7a
 # 内容上传令牌（加载页图片/故事上传接口的请求头 X-Upload-Token，留空则禁用 API 上传）
 UPLOAD_TOKEN=
 
+# 好句配图 Unsplash Access Key（https://unsplash.com/developers 申请，免费 50 请求/小时；留空则无配图）
+UNSPLASH_ACCESS_KEY=
+
 # ============ 生产部署配置（[deploy] 节，本地开发保持 env=dev） ============
 [deploy]
 env=dev

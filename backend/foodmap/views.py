@@ -28,6 +28,7 @@ from .models import (
     Pet,
     PetEvent,
     PetPhoto,
+    Quote,
     Restaurant,
     SplashImage,
     SplashState,
@@ -1108,3 +1109,81 @@ def _divination_json(d):
         'reading': d.reading,
         'lucky': d.lucky,
     }
+
+
+# ============ 好句好段 ============
+
+
+def _quote_json(q):
+    """好句序列化（与 APP Quote.fromJson 字段对应）。"""
+    return {
+        'id': q.pk,
+        'date': q.date.isoformat(),
+        'text': q.text,
+        'author': q.author,
+        'source': q.source,
+        'category': q.category,
+        'image_url': q.image_url,
+    }
+
+
+@require_api_token
+def api_quote_today(request):
+    """今日好句：按日期缓存，当天首次请求从 hitokoto.cn 拉取并取 Unsplash 配图，之后直接返回。"""
+    today = datetime.date.today().isoformat()
+    cached = Quote.objects.filter(date=today).first()
+    if cached:
+        return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
+
+    # 从 hitokoto.cn 拉取
+    from .data.quotes import fetch_hitokoto
+    item = fetch_hitokoto()
+    if not item:
+        return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
+
+    # Unsplash 配图：一次性取好落库，避免历史列表重复请求（免费额度 50 次/小时）
+    from .services.unsplash import fetch_cover_url
+    image_url = fetch_cover_url(item['image_keyword'])
+
+    obj, _ = Quote.objects.update_or_create(
+        date=today,
+        defaults={
+            'text': item['text'],
+            'author': item['author'],
+            'source': item['source'],
+            'category': item['category'],
+            'image_keyword': item['image_keyword'],
+            'image_url': image_url,
+            'uuid': item['uuid'],
+            'detail_url': item['detail_url'],
+        },
+    )
+    return JsonResponse({'date': today, 'cached': False, 'quote': _quote_json(obj)})
+
+
+@require_api_token
+def api_quote_history(request):
+    """历史好句列表：按日期倒序。"""
+    quotes = [
+        _quote_json(q)
+        for q in Quote.objects.all().order_by('-date')[:30]
+    ]
+    return JsonResponse({'total': len(quotes), 'quotes': quotes})
+
+
+@require_api_token
+def api_quote_random(request):
+    """再来一条：实时从 hitokoto.cn 拉取，不缓存、不计数、不限制。"""
+    from .data.quotes import fetch_hitokoto
+    item = fetch_hitokoto()
+    if not item:
+        return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
+    from .services.unsplash import fetch_cover_url
+    image_url = fetch_cover_url(item['image_keyword'])
+    return JsonResponse({
+        'text': item['text'],
+        'author': item['author'],
+        'source': item['source'],
+        'category': item['category'],
+        'image_url': image_url,
+    })

@@ -46,4 +46,8 @@ urlpatterns = [
     path('api/splash/upload/', views.api_splash_upload, name='splash_upload'),
     # 每日占卜
     path('api/divination/today/', views.api_divination_today, name='divination_today'),
+    # 好句好段
+    path('api/quotes/today/', views.api_quote_today, name='quote_today'),
+    path('api/quotes/history/', views.api_quote_history, name='quote_history'),
+    path('api/quotes/random/', views.api_quote_random, name='quote_random'),
 ]

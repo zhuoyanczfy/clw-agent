@@ -246,6 +246,29 @@ class Divination(models.Model):
         return f'{self.date} {self.card_name}（{self.orientation}）'
 
 
+class Quote(models.Model):
+    """好句好段：按日期缓存当日句子，数据源为 hitokoto.cn（一言）。"""
+
+    date = models.DateField('日期', unique=True)
+    text = models.CharField('金句', max_length=300)
+    author = models.CharField('作者', max_length=50)
+    source = models.CharField('出处', max_length=100)
+    category = models.CharField('分类', max_length=20, blank=True)
+    image_keyword = models.CharField('配图关键词', max_length=50, blank=True)
+    image_url = models.CharField('配图链接', max_length=300, blank=True)
+    uuid = models.CharField('一言UUID', max_length=36, blank=True)
+    detail_url = models.CharField('详情链接', max_length=200, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '好句好段'
+        verbose_name_plural = '好句好段'
+        ordering = ['-date']
+
+    def __str__(self):
+        return f'{self.date} {self.author}《{self.source}》'
+
+
 class DiningRecord(models.Model):
     """一次用餐记录：时间、评分、点评正文与回忆。"""
 

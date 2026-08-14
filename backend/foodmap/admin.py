@@ -10,6 +10,7 @@ from .models import (
     Pet,
     PetEvent,
     PetPhoto,
+    Quote,
     Restaurant,
     SplashImage,
     WishlistItem,
@@ -120,3 +121,18 @@ class DivinationAdmin(admin.ModelAdmin):
     list_display = ('date', 'card_name', 'orientation', 'lucky', 'created_at')
     search_fields = ('card_name', 'reading')
     date_hierarchy = 'date'
+
+
+@admin.register(Quote)
+class QuoteAdmin(admin.ModelAdmin):
+    """好句好段缓存：按日期记录，可在后台查看历史或删除后重新拉取。"""
+
+    list_display = ('date', 'author', 'source', 'category', 'text_preview')
+    list_filter = ('category', 'date')
+    search_fields = ('text', 'author', 'source')
+    date_hierarchy = 'date'
+    readonly_fields = ('uuid', 'detail_url')
+
+    @admin.display(description='金句预览')
+    def text_preview(self, obj):
+        return obj.text[:50] + '…' if len(obj.text) > 50 else obj.text

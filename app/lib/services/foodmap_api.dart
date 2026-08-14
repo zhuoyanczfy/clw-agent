@@ -8,6 +8,7 @@ import '../models/dining_record.dart';
 import '../models/district.dart';
 import '../models/divination.dart';
 import '../models/pet.dart';
+import '../models/quote.dart';
 import '../models/restaurant.dart';
 import '../models/splash_image.dart';
 import '../models/wishlist_item.dart';
@@ -111,6 +112,28 @@ class FoodmapApi {
       timeout: const Duration(seconds: 75),
     ) as Map<String, dynamic>;
     return Divination.fromJson(json);
+  }
+
+  // ---------- 好句好段 ----------
+
+  /// 今日好句：按日期缓存，当天恒定。
+  static Future<Quote> fetchTodayQuote() async {
+    final json = await _getJson('/api/quotes/today/') as Map<String, dynamic>;
+    return Quote.fromJson(json);
+  }
+
+  /// 历史好句列表。
+  static Future<List<Quote>> fetchQuoteHistory() async {
+    final json = await _getJson('/api/quotes/history/') as Map<String, dynamic>;
+    return (json['quotes'] as List)
+        .map((e) => Quote.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 再来一条：实时拉取，不缓存、不计数。
+  static Future<Quote> fetchRandomQuote() async {
+    final json = await _getJson('/api/quotes/random/') as Map<String, dynamic>;
+    return Quote.fromJson(json);
   }
 
   // ---------- 区与餐厅 ----------
