@@ -97,7 +97,7 @@ class _FoodPageState extends State<FoodPage> {
                     padding: EdgeInsets.all(24),
                     child: Center(
                       child: Text(
-                        '还没有收藏～在美食详情页点 ♥ 收藏\n以后想吃的都记在这里',
+                        '还没有收藏～在美食详情页点 ⭐ 收藏\n以后想吃的都记在这里',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 13, color: AppTheme.textLight, height: 1.6),
@@ -130,11 +130,11 @@ class _FoodPageState extends State<FoodPage> {
                     imageUrl: dish.imageUrl,
                     fit: BoxFit.cover,
                     placeholder: (_, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(child: CircularProgressIndicator()),
                     ),
                     errorWidget: (_, _, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(
                           child: Text('🫕', style: TextStyle(fontSize: 48))),
                     ),
@@ -185,8 +185,8 @@ class _FoodPageState extends State<FoodPage> {
                         onPressed: () => _toggleFavorite(dish),
                         icon: Icon(
                           _favorites.any((d) => d.id == dish.id)
-                              ? Icons.favorite
-                              : Icons.favorite_border,
+                              ? Icons.star
+                              : Icons.star_border,
                           color: AppTheme.primaryDark,
                         ),
                       ),
@@ -220,7 +220,7 @@ class _FoodPageState extends State<FoodPage> {
                     imageUrl: dish.imageUrl,
                     fit: BoxFit.cover,
                     placeholder: (_, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(
                         child: SizedBox(
                           width: 16,
@@ -230,7 +230,7 @@ class _FoodPageState extends State<FoodPage> {
                       ),
                     ),
                     errorWidget: (_, _, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(
                           child: Text('🍽️', style: TextStyle(fontSize: 24))),
                     ),
@@ -265,7 +265,7 @@ class _FoodPageState extends State<FoodPage> {
               ),
               IconButton(
                 onPressed: () => _toggleFavorite(dish),
-                icon: const Icon(Icons.favorite, color: AppTheme.primaryDark),
+                icon: const Icon(Icons.star, color: AppTheme.primaryDark),
               ),
             ],
           ),

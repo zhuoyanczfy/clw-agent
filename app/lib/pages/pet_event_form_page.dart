@@ -145,7 +145,7 @@ class _PetEventFormPageState extends State<PetEventFormPage> {
                         _title.text = _kindMeta[entry.key]!.$3;
                       }
                     }),
-                    selectedColor: const Color(0xFFFFE9E9),
+                    selectedColor: const Color(0xFFFFF3D6),
                     labelStyle: TextStyle(
                       fontSize: 13,
                       color: _kind == entry.key

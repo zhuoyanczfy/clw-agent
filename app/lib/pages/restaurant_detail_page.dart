@@ -148,7 +148,7 @@ class _RestaurantDetailPageState extends State<RestaurantDetailPage> {
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFFFE9E9),
+                    backgroundColor: const Color(0xFFFFF3D6),
                     child: Text('${rec.rating}★',
                         style: const TextStyle(
                             fontSize: 13, color: AppTheme.primaryDark)),

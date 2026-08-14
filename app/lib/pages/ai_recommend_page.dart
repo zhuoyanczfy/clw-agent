@@ -194,7 +194,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
             onPressed: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const WishlistPage())),
-            icon: const Icon(Icons.favorite_outline),
+            icon: const Icon(Icons.star_outline),
             tooltip: '待尝清单',
           ),
           IconButton(
@@ -346,7 +346,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                   top: 6,
                   right: 6,
                   child: Icon(
-                    Icons.favorite,
+                    Icons.star,
                     size: 15,
                     color: Colors.white,
                     shadows: [Shadow(color: Colors.black26, blurRadius: 4)],

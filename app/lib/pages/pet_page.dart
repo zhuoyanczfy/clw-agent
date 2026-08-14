@@ -435,7 +435,7 @@ class _PetPageState extends State<PetPage> {
                       runSpacing: 8,
                       children: [
                         if (age.isNotEmpty) _infoChip('🎂 $age'),
-                        if (companion != null) _infoChip('💛 已相伴 $companion 天'),
+                        if (companion != null) _infoChip('⭐ 已相伴 $companion 天'),
                         if (pet.birthday.isNotEmpty)
                           _infoChip('📅 ${pet.birthday}'),
                         if (pet.adoptDate.isNotEmpty)
@@ -464,7 +464,7 @@ class _PetPageState extends State<PetPage> {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFFFFE9E9),
+            color: const Color(0xFFFFF3D6),
             border: Border.all(color: Colors.white, width: 3),
             boxShadow: [
               BoxShadow(
@@ -836,7 +836,7 @@ class _PetPageState extends State<PetPage> {
                     imageUrl: url,
                     fit: BoxFit.cover,
                     placeholder: (_, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(
                         child: SizedBox(
                           width: 20,
@@ -849,7 +849,7 @@ class _PetPageState extends State<PetPage> {
                       ),
                     ),
                     errorWidget: (_, _, _) => Container(
-                      color: const Color(0xFFFFE9E9),
+                      color: const Color(0xFFFFF3D6),
                       child: const Center(child: Text('🐾', style: TextStyle(fontSize: 30))),
                     ),
                   );

@@ -218,7 +218,7 @@ class _WishlistPageState extends State<WishlistPage> {
       return ListView(
         children: [
           const SizedBox(height: 80),
-          Icon(eatenMode ? Icons.check_circle_outline : Icons.favorite_border,
+          Icon(eatenMode ? Icons.check_circle_outline : Icons.star_border,
               size: 48, color: AppTheme.textLight),
           const SizedBox(height: 12),
           Center(

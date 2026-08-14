@@ -59,11 +59,11 @@ class _DishPageState extends State<DishPage> {
                       imageUrl: dish.imageUrl,
                       fit: BoxFit.cover,
                       placeholder: (_, _) => Container(
-                        color: const Color(0xFFFFE9E9),
+                        color: const Color(0xFFFFF3D6),
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                       errorWidget: (_, _, _) => Container(
-                        color: const Color(0xFFFFE9E9),
+                        color: const Color(0xFFFFF3D6),
                         child: const Center(
                             child: Text('🫕', style: TextStyle(fontSize: 64))),
                       ),
@@ -86,7 +86,7 @@ class _DishPageState extends State<DishPage> {
                     child: IconButton.filledTonal(
                       onPressed: _toggleFavorite,
                       icon: Icon(
-                        _isFavorite ? Icons.favorite : Icons.favorite_border,
+                        _isFavorite ? Icons.star : Icons.star_border,
                         color: AppTheme.primaryDark,
                       ),
                       style: IconButton.styleFrom(
@@ -107,7 +107,7 @@ class _DishPageState extends State<DishPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFE9E9),
+                            color: const Color(0xFFFFF3D6),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -146,9 +146,9 @@ class _DishPageState extends State<DishPage> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF7F3),
+                          color: const Color(0xFFFFFBF0),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                          border: Border.all(color: const Color(0xFFFFE9B8)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,9 +175,9 @@ class _DishPageState extends State<DishPage> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF7F3),
+                          color: const Color(0xFFFFFBF0),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                          border: Border.all(color: const Color(0xFFFFE9B8)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,9 +231,9 @@ class _DishPageState extends State<DishPage> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF7F3),
+                          color: const Color(0xFFFFFBF0),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFFE0D6)),
+                          border: Border.all(color: const Color(0xFFFFE9B8)),
                         ),
                         child: Text(
                           dish.recipe,
@@ -250,7 +250,7 @@ class _DishPageState extends State<DishPage> {
                       child: FilledButton.icon(
                         onPressed: _toggleFavorite,
                         icon: Icon(
-                          _isFavorite ? Icons.favorite : Icons.favorite_border,
+                          _isFavorite ? Icons.star : Icons.star_border,
                           size: 18,
                         ),
                         label: Text(_isFavorite ? '已收藏，记下这道想吃的' : '收藏，下次一起去吃'),

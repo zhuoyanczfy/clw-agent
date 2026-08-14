@@ -155,7 +155,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 8),
             Text(
               '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
-              style: const TextStyle(fontSize: 13, color: Color(0xFFFFF1F1)),
+              style: const TextStyle(fontSize: 13, color: Color(0xFFFFF7E0)),
             ),
             const SizedBox(height: 16),
             Row(
@@ -194,7 +194,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: Color(0xFFFFF1F1)),
+              style: const TextStyle(fontSize: 11, color: Color(0xFFFFF7E0)),
             ),
           ],
         ),
@@ -255,13 +255,13 @@ class _HomePageState extends State<HomePage> {
                             imageUrl: dish.imageUrl,
                             fit: BoxFit.cover,
                             placeholder: (_, _) => Container(
-                              color: const Color(0xFFFFE9E9),
+                              color: const Color(0xFFFFF3D6),
                               child: const Center(
                                 child: CircularProgressIndicator(),
                               ),
                             ),
                             errorWidget: (_, _, _) => Container(
-                              color: const Color(0xFFFFE9E9),
+                              color: const Color(0xFFFFF3D6),
                               child: const Center(
                                 child: HeartBeat(
                                   maxScale: 1.1,
@@ -366,7 +366,7 @@ class _HomePageState extends State<HomePage> {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFE9E9),
+                    color: const Color(0xFFFFF3D6),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Center(
@@ -498,7 +498,7 @@ class _HeartBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: const Center(child: Text('❤️', style: TextStyle(fontSize: 22))),
+      child: const Center(child: Text('⭐', style: TextStyle(fontSize: 22))),
     );
   }
 }

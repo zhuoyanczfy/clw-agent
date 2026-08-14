@@ -177,7 +177,7 @@ class _SplashPageState extends State<SplashPage> {
                 BouncyIn(
                   child: HeartBeat(
                     maxScale: 1.15,
-                    child: const Text('❤️', style: TextStyle(fontSize: 56)),
+                    child: const Text('⭐', style: TextStyle(fontSize: 56)),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -227,7 +227,7 @@ class _SplashPageState extends State<SplashPage> {
   }
 }
 
-/// 加载页飘浮的爱心粒子（固定种子随机分布，循环上浮淡出）
+/// 加载页飘浮的星星粒子（固定种子随机分布，循环上浮淡出）
 class _FloatingHearts extends StatefulWidget {
   const _FloatingHearts();
 
@@ -246,7 +246,7 @@ class _FloatingHeartsState extends State<_FloatingHearts>
 
   static List<_HeartParticle> _makeParticles() {
     final rnd = math.Random(7); // 固定种子，保证每次布局一致
-    const glyphs = ['❤️', '💕', '💖', '✨', '🫧'];
+    const glyphs = ['⭐', '✨', '🌟', '💫', '✨'];
     return List.generate(9, (i) {
       return _HeartParticle(
         glyph: glyphs[i % glyphs.length],

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'widgets/cute_widgets.dart';
 
-/// 温馨粉暖色主题：整体暖色调 + 圆角卡片风格
+/// 暖黄主题：金色阳光感 + 圆角卡片风格（贴合 Light 主题）
 class AppTheme {
-  static const Color primary = Color(0xFFFF8C9E); // 温暖粉
-  static const Color primaryDark = Color(0xFFF26B8A);
+  static const Color primary = Color(0xFFFFB300); // 暖金黄
+  static const Color primaryDark = Color(0xFFE69600);
   static const Color accent = Color(0xFFFFB74D); // 暖橙
-  static const Color bg = Color(0xFFFFF7F3); // 米白底
+  static const Color bg = Color(0xFFFFFBF0); // 暖米黄底
   static const Color card = Colors.white;
   static const Color textDark = Color(0xFF4A3F35);
   static const Color textLight = Color(0xFF9B8F85);

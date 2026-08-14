@@ -145,7 +145,7 @@ class _PetFormPageState extends State<PetFormPage> {
                   height: 96,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFFFFE9E9),
+                    color: const Color(0xFFFFF3D6),
                     border: Border.all(color: Colors.white, width: 3),
                     boxShadow: [
                       BoxShadow(
@@ -299,7 +299,7 @@ class _PetFormPageState extends State<PetFormPage> {
       label: Text(label),
       selected: _gender == value,
       onSelected: (_) => setState(() => _gender = value),
-      selectedColor: const Color(0xFFFFE9E9),
+      selectedColor: const Color(0xFFFFF3D6),
       labelStyle: TextStyle(
         fontSize: 14,
         color: _gender == value ? AppTheme.primaryDark : AppTheme.textLight,
