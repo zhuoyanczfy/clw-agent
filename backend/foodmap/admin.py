@@ -5,6 +5,7 @@ from .models import (
     DiningRecord,
     Dish,
     District,
+    Divination,
     FavoriteDish,
     Pet,
     PetEvent,
@@ -110,3 +111,12 @@ class SplashImageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'enabled', 'created_at')
     list_filter = ('enabled',)
     list_editable = ('enabled',)
+
+
+@admin.register(Divination)
+class DivinationAdmin(admin.ModelAdmin):
+    """每日占卜缓存：当天首次占卜生成，可在后台查看或删除后重新生成。"""
+
+    list_display = ('date', 'card_name', 'orientation', 'lucky', 'created_at')
+    search_fields = ('card_name', 'reading')
+    date_hierarchy = 'date'

@@ -11,6 +11,7 @@ import '../services/weather_service.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
+import 'divination_page.dart';
 import 'pet_page.dart';
 import 'reminder_settings_page.dart';
 
@@ -70,6 +71,8 @@ class _HomePageState extends State<HomePage> {
                 _buildDaysCard(),
                 const SizedBox(height: 20),
                 _buildPetCard(),
+                const SizedBox(height: 20),
+                _buildDivinationCard(),
                 const SizedBox(height: 20),
                 _buildTodayDishCard(),
                 const SizedBox(height: 20),
@@ -392,6 +395,73 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const PetPage())).then((_) => _load());
+  }
+
+  void _openDivination() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DivinationPage()));
+  }
+
+  // ---- 每日占卜入口卡片 ----
+  Widget _buildDivinationCard() {
+    return BouncyIn(
+      offsetY: 20,
+      delay: const Duration(milliseconds: 200),
+      child: Card(
+        child: SquishyTap(
+          onTap: _openDivination,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7B68B0), Color(0xFF4A3F7A)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Text('🔮', style: TextStyle(fontSize: 22)),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '每日占卜',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '转动星盘，抽取今日塔罗与好运指引',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppTheme.textLight),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _openReminderSettings() {

@@ -22,6 +22,7 @@ from .models import (
     DiningRecordPhoto,
     Dish,
     District,
+    Divination,
     FavoriteDish,
     Pet,
     PetEvent,
@@ -32,7 +33,7 @@ from .models import (
     WishlistItem,
 )
 from .services.agent import build_system_prompt, execute_tool_calls
-from .services.llm import LLMError, chat_stream, chat_tool_round
+from .services.llm import LLMError, chat, chat_stream, chat_tool_round
 from .services.profile import build_taste_profile
 from .services.tools.registry import tools_schema
 
@@ -976,3 +977,124 @@ def api_splash_upload(request):
         image=f,
     )
     return JsonResponse({'ok': True, 'splash': _splash_json(img)}, status=201)
+
+
+# ============ 每日占卜 ============
+
+# 22 张大阿卡纳：牌名 → 关键词
+TAROT_CARDS = {
+    '愚人': '新的开始 · 冒险 · 纯真',
+    '魔术师': '创造力 · 行动 · 自信',
+    '女祭司': '直觉 · 内心的声音 · 神秘',
+    '女皇': '丰盛 · 温柔 · 滋养',
+    '皇帝': '秩序 · 责任 · 掌控',
+    '教皇': '传统 · 指引 · 信念',
+    '恋人': '爱 · 契合 · 选择',
+    '战车': '意志 · 前进 · 胜利',
+    '力量': '勇气 · 耐心 · 温柔的力量',
+    '隐士': '沉淀 · 内省 · 寻找答案',
+    '命运之轮': '转机 · 循环 · 好运将至',
+    '正义': '公平 · 清晰 · 因果',
+    '倒吊人': '换位思考 · 等待 · 放下',
+    '死神': '结束与重生 · 蜕变 · 告别',
+    '节制': '平衡 · 调和 · 慢慢来',
+    '恶魔': '执念 · 束缚 · 看清欲望',
+    '高塔': '突变 · 打破 · 重建',
+    '星星': '希望 · 治愈 · 美好预兆',
+    '月亮': '朦胧 · 情绪 · 潜意识的提示',
+    '太阳': '快乐 · 成功 · 满满的能量',
+    '审判': '觉醒 · 召唤 · 新的阶段',
+    '世界': '圆满 · 完成 · 旅程的收获',
+}
+
+
+def _draw_tarot_card(date_str):
+    """抽一张牌：以日期哈希为种子，同一天恒定，天然保证正逆位固定。"""
+    seed = int(hashlib.md5(f'tarot-{date_str}'.encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+    card = rng.choice(list(TAROT_CARDS.items()))
+    orientation = '正位' if rng.random() < 0.7 else '逆位'
+    return card[0], card[1], orientation
+
+
+def _generate_reading(card_name, keyword, orientation, her_name):
+    """调用 DeepSeek 生成当日解读，失败时返回兜底文案。"""
+    name = (her_name or '').strip() or '你'
+    messages = [
+        {
+            'role': 'system',
+            'content': (
+                '你是一位温柔神秘的塔罗占卜师，为心爱的人解读每日塔罗牌。'
+                '语气温暖治愈、带一点神秘感，禁止使用Markdown格式，直接输出纯文本。'
+            ),
+        },
+        {
+            'role': 'user',
+            'content': (
+                f'今天是{name}抽到的牌：「{card_name} · {orientation}」，牌意关键词：{keyword}。\n'
+                '请输出两部分内容，格式严格如下（不要输出其他任何内容）：\n'
+                '【今日解读】一段120~180字的解读，结合牌意聊聊她今天的运势、心情和值得留意的小美好，'
+                '语言要像在她耳边轻声说话一样温柔。\n'
+                '【幸运指引】一句20字以内的今日幸运提示（如幸运色、幸运小物或一个温暖的小建议）。'
+            ),
+        },
+    ]
+    text = chat(messages, temperature=0.9, timeout=60).strip()
+    reading, lucky = '', ''
+    for part in text.split('【'):
+        part = part.strip()
+        if part.startswith('今日解读】'):
+            reading = part[len('今日解读】'):].strip()
+        elif part.startswith('幸运指引】'):
+            lucky = part[len('幸运指引】'):].strip()
+    if not reading:
+        reading = text
+    return reading, lucky
+
+
+@require_api_token
+def api_divination_today(request):
+    """今日占卜：当天首次请求抽牌并调 DeepSeek 生成解读，之后直接返回缓存（零点自动刷新）。"""
+    today = datetime.date.today().isoformat()
+    cached = Divination.objects.filter(date=today).first()
+    if cached:
+        return JsonResponse({'date': today, 'cached': True, 'divination': _divination_json(cached)})
+
+    card_name, keyword, orientation = _draw_tarot_card(today)
+    # 昵称取不到配置时用全局默认值，与 APP 端 RemoteConfig 展示保持一致
+    her_name = (
+        AppConfig.objects.filter(key='her_name').values_list('value', flat=True).first()
+        or APP_CONFIG_DEFAULTS['her_name']
+    )
+    try:
+        reading, lucky = _generate_reading(card_name, keyword, orientation, her_name)
+    except LLMError as exc:
+        # DeepSeek 不可用时也落库兜底文案，保证当天后续请求稳定返回
+        reading = (
+            f'今天抽到的是「{card_name} · {orientation}」，{keyword}。'
+            '星星暂时躲进了云里，占卜师没能连线成功，但好运气并不会缺席——'
+            '愿你今天被温柔以待，遇到的都是小美好。'
+        )
+        lucky = '幸运色：奶杏黄'
+
+    obj, _ = Divination.objects.update_or_create(
+        date=today,
+        defaults={
+            'card_name': card_name,
+            'orientation': orientation,
+            'keyword': keyword,
+            'reading': reading,
+            'lucky': lucky,
+        },
+    )
+    return JsonResponse({'date': today, 'cached': False, 'divination': _divination_json(obj)})
+
+
+def _divination_json(d):
+    return {
+        'card_name': d.card_name,
+        'orientation': d.orientation,
+        'keyword': d.keyword,
+        'reading': d.reading,
+        'lucky': d.lucky,
+    }

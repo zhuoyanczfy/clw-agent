@@ -226,6 +226,26 @@ class SplashState(models.Model):
         return f'{self.last_date} → 图片 #{self.last_id}'
 
 
+class Divination(models.Model):
+    """每日占卜结果：按日期缓存，当天多次打开返回同一次抽牌与解读，零点自动刷新。"""
+
+    date = models.DateField('占卜日期', unique=True)
+    card_name = models.CharField('塔罗牌', max_length=50)
+    orientation = models.CharField('牌向', max_length=10)  # 正位 / 逆位
+    keyword = models.CharField('关键词', max_length=100, blank=True)
+    reading = models.TextField('今日解读', blank=True)
+    lucky = models.CharField('幸运指引', max_length=200, blank=True)
+    created_at = models.DateTimeField('生成时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '每日占卜'
+        verbose_name_plural = '每日占卜'
+        ordering = ['-date']
+
+    def __str__(self):
+        return f'{self.date} {self.card_name}（{self.orientation}）'
+
+
 class DiningRecord(models.Model):
     """一次用餐记录：时间、评分、点评正文与回忆。"""
 

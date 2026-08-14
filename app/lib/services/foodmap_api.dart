@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/dining_record.dart';
 import '../models/district.dart';
+import '../models/divination.dart';
 import '../models/pet.dart';
 import '../models/restaurant.dart';
 import '../models/splash_image.dart';
@@ -97,6 +98,19 @@ class FoodmapApi {
     } catch (_) {
       return false;
     }
+  }
+
+  // ---------- 每日占卜 ----------
+
+  /// 今日占卜结果：当天首次请求由后端抽牌并调 DeepSeek 生成，之后命中缓存。
+  /// 生成解读耗时较长，超时放宽到 75 秒。
+  static Future<Divination> fetchTodayDivination() async {
+    final json = await _request(
+      'GET',
+      '/api/divination/today/',
+      timeout: const Duration(seconds: 75),
+    ) as Map<String, dynamic>;
+    return Divination.fromJson(json);
   }
 
   // ---------- 区与餐厅 ----------

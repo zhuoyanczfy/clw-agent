@@ -44,4 +44,6 @@ urlpatterns = [
     # 加载页图片
     path('api/splash/', views.api_splash, name='splash'),
     path('api/splash/upload/', views.api_splash_upload, name='splash_upload'),
+    # 每日占卜
+    path('api/divination/today/', views.api_divination_today, name='divination_today'),
 ]
