@@ -15,6 +15,9 @@
 - **Django Admin 后台**：随时补录/管理数据
 - **APP 云端配置**：`/api/config/` 下发首页文案（昵称/欢迎语/认识日期/今日美食标题）与提醒配置（喝水/晚安/美食推荐/天气关怀的文案、时间、开关），Django Admin 的「APP配置」改一条即生效，APP 启动自动拉取，无需重新打包
 - **天气预报**：`/api/weather/` 代理高德天气查询（实况 30min / 预报 3h 进程内缓存），供 APP 首页天气条与天气关怀提醒使用（城市 adcode 可配 `WEATHER_ADCODE`，缺省南京）
+- **宠物名片**：`/api/pets/` 宠物档案 + 照片 + 成长事件（增删改），供 APP「宠物」页使用
+- **每日塔罗占卜**：`/api/divination/today/` 按日期确定性抽牌（md5 种子，当日恒定，70% 正位/30% 逆位）+ DeepSeek 生成「今日解读/幸运指引」两段文案，按日期缓存（零点自动刷新）；DeepSeek 不可用时返回温柔兜底文案，保证当天稳定
+- **好句好段**：`/api/quotes/today/` 每日一句（hitokoto.cn「一言」，文学/哲学分类，15~80 字）+ Unsplash 官方 API 按主题配图（一次性落库，历史列表零消耗）；`/api/quotes/history/` 历史回顾、`/api/quotes/random/` 实时再来一条；hitokoto 不可用时返回 503
 
 ## 技术栈
 
@@ -24,6 +27,7 @@
 - DeepSeek Chat API（OpenAI 兼容，流式 SSE 输出），配置见 `config/config.ini`（`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`）
 - 轻量 Agent 层：MD 定义 Agent（`foodmap/agents/recommender/agent.md`）+ 工具注册表（`foodmap/services/tools/`）+ OpenAI 兼容 function calling，不引入 CrewAI
 - 高德地图 Web 服务 API（POI 搜索，个人免费 Key），配置见 `config/config.ini`（`MAP_KEY`）
+- hitokoto.cn「一言」API（MIT 开源句子库）+ Unsplash 官方 API（免费 50 请求/小时，Access Key 配置 `UNSPLASH_ACCESS_KEY`，留空则好句无配图）
 
 ## 快速开始
 
@@ -72,12 +76,13 @@ python manage.py runserver 0.0.0.0:8000
 ├── requirements.txt
 ├── config/                  # Django 项目配置 + config.ini（API Key 等自定义配置）
 ├── foodmap/                 # 业务应用（纯 REST API）
-│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单 / 加载页 / APP配置
+│   ├── models.py            # 行政区 / 餐厅 / 用餐记录 / 待尝清单 / 宠物 / 加载页 / 占卜 / 好句 / APP配置
 │   ├── views.py             # 全部 API 视图（JsonResponse + SSE 流式聊天）
-│   ├── urls.py              # 20 个 /api/ 路由（见根 README 主要 API 表）
+│   ├── urls.py              # 全部 /api/ 路由（见根 README 主要 API 表）
 │   ├── dishes_data.py       # 40 道美食库（每日推荐数据源，与 APP 内置一致）
+│   ├── data/quotes.py       # hitokoto.cn 客户端（分类/长度过滤 → 中文分类名 + 配图关键词）
 │   ├── agents/recommender/agent.md   # 推荐官定义（frontmatter + Goal/Backstory/Task Template/Expected Output）
-│   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）
+│   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）+ unsplash.py（好句配图）
 │   │   ├── agent.py         # agent.md 解析（mtime 缓存）+ system prompt 构建 + 工具轮编排
 │   │   └── tools/           # 工具注册表 registry.py + search_restaurants 实现
 │   ├── geodata/             # 南京区划 GeoJSON
@@ -116,6 +121,7 @@ python manage.py runserver 0.0.0.0:8000
 2. 数据库迁移：本地 `dumpdata` 导出 → 服务器 `migrate` + `loaddata` 导入，`media/` 目录整体同步
 3. 高德 `MAP_KEY` 需在控制台把服务器公网 IP 加入白名单
 4. 加载页上传接口需在 `config/config.ini` 配置 `UPLOAD_TOKEN`（请求头 `X-Upload-Token`，留空则禁用 API 上传，仍可用 Admin 管理）
+5. 好句配图需配置 `UNSPLASH_ACCESS_KEY`（Unsplash 官方 API，免费 50 次/小时；留空则好句无配图）
 
 ## 后续可做
 

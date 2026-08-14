@@ -2,8 +2,8 @@
 
 为她定制的一套美食系礼物：
 
-- **📱 安卓 APP**（`app/`）：每天推送一道美食推荐 + 定时提醒喝水、吃美食、早点睡，首页显示她的昵称、认识天数与专属欢迎语；内置「美食足迹」：南京分区地图（去过哪里一目了然）、用餐记录（餐厅/评分/点评/照片）、待尝清单、AI 美食推荐官
-- **🍜 Django API 后端**（`backend/`）：美食足迹的数据中枢——南京真实餐厅库、用餐记录、待尝清单、AI 推荐官（DeepSeek）全部由后端提供，APP 通过 HTTP 接口调用获取数据
+- **📱 安卓 APP**（`app/`）：每天推送一道美食推荐 + 定时提醒喝水、吃美食、早点睡，首页显示她的昵称、认识天数与专属欢迎语；内置「美食足迹」（南京分区地图、用餐记录、待尝清单、AI 美食推荐官）+ 三个陪伴模块：宠物名片、每日塔罗占卜、好句好段
+- **🍜 Django API 后端**（`backend/`）：美食足迹的数据中枢——南京真实餐厅库、用餐记录、待尝清单、AI 推荐官（DeepSeek）、宠物名片、每日占卜（DeepSeek 解读）、好句好段（hitokoto + Unsplash 配图）全部由后端提供，APP 通过 HTTP 接口调用获取数据
 
 APP 内置 40 道美食库，不连后端也能独立使用；配置后端地址后，每日推荐、足迹地图、记录、待尝、推荐官全部走后端数据。
 
@@ -15,13 +15,13 @@ clw_agent/
 │   ├── lib/
 │   │   ├── config/app_config.dart   # ★ 专属信息配置（送人前改这里）
 │   │   ├── data/dishes.dart         # 内置 40 道美食（断网可用，与后端算法一致）
-│   │   ├── models/                  # 区 / 餐厅 / 用餐记录 / 待尝清单 数据模型
-│   │   ├── services/                # Django API 客户端 + 通知服务 + 后端地址配置
-│   │   └── pages/                   # 首页 / 美食 / 足迹 / 推荐官 / 设置
+│   │   ├── models/                  # 区 / 餐厅 / 记录 / 待尝 / 宠物 / 占卜 / 好句 / 天气 数据模型
+│   │   ├── services/                # Django API 客户端 + 通知/好句推送服务 + 后端地址配置
+│   │   └── pages/                   # 首页 / 美食 / 足迹 / 推荐官 / 宠物 / 占卜 / 好句 / 设置
 │   └── android/             # 安卓工程（应用名「光旅之盘」）
 └── backend/                 # Django 4.2 纯 API 后端（南京美食足迹数据中枢）
-    ├── config/              # Django 配置 + config.ini（DeepSeek/高德 API Key，勿提交）
-    ├── foodmap/             # 业务应用：区 / 餐厅 / 记录 / 待尝 / AI 推荐官（纯 REST API）
+    ├── config/              # Django 配置 + config.ini（DeepSeek/高德/Unsplash Key，勿提交）
+    ├── foodmap/             # 业务应用：区 / 餐厅 / 记录 / 待尝 / 宠物 / 占卜 / 好句 / AI 推荐官（纯 REST API）
     ├── deploy/              # 生产部署脚本（Nginx + Gunicorn）
     └── requirements.txt
 ```
@@ -79,7 +79,7 @@ python manage.py migrate         # 首次（本机已有 db.sqlite3 含历史回
 python manage.py runserver 0.0.0.0:8000
 ```
 
-- API Key 配置在 `backend/config/config.ini`（DeepSeek / 高德），**该文件不入库**，模板见 `config.ini.example`
+- API Key 配置在 `backend/config/config.ini`（DeepSeek / 高德 / Unsplash），**该文件不入库**，模板见 `config.ini.example`
 - 健康检查：`http://127.0.0.1:8000/api/health/`
 
 ### 主要 API
@@ -100,6 +100,12 @@ python manage.py runserver 0.0.0.0:8000
 | `GET /api/splash/` | 当日加载页图片（同一天固定一张、相邻两天不重复） |
 | `POST /api/splash/upload/` | 上传加载页图片（需 `X-Upload-Token`，multipart） |
 | `GET /api/config/` | APP 云端配置（首页文案/昵称/认识日期 + 提醒文案/时间/开关，Admin 改后无需重打包） |
+| `GET /api/weather/` | 天气预报（高德代理，首页天气条与天气关怀提醒） |
+| `GET/POST /api/pets/` | 宠物名片（信息/照片/成长事件） |
+| `GET /api/divination/today/` | 每日塔罗占卜（当日恒定抽牌 + DeepSeek 解读，按日期缓存） |
+| `GET /api/quotes/today/` | 今日好句（hitokoto 文学/哲学 + Unsplash 配图，按日期缓存） |
+| `GET /api/quotes/history/` | 历史好句列表（倒序 30 条） |
+| `GET /api/quotes/random/` | 再来一条（实时拉取，不缓存） |
 
 ### 让 APP 走后端（局域网）
 
