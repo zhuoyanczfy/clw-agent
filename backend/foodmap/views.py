@@ -1115,10 +1115,14 @@ def _divination_json(d):
 
 
 def _quote_json(q):
-    """好句序列化（与 APP Quote.fromJson 字段对应）。"""
+    """好句序列化（与 APP Quote.fromJson 字段对应）。
+
+    注意：update_or_create 新建的对象 date 仍是传入的 str（未经过 DB 类型转换），
+    与查询出的 date 对象不一致，统一用 str() 兼容两者。
+    """
     return {
         'id': q.pk,
-        'date': q.date.isoformat(),
+        'date': str(q.date),
         'text': q.text,
         'author': q.author,
         'source': q.source,
