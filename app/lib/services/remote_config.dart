@@ -55,6 +55,11 @@ class RemoteConfig {
   static const kWaterEnabled = 'water_enabled';
   static const kNightEnabled = 'night_enabled';
   static const kDishEnabled = 'dish_enabled';
+  static const kWeatherEnabled = 'weather_enabled';
+  static const kWeatherTime = 'weather_time';
+  static const kWeatherTitle = 'weather_title';
+  static const kWeatherRainBody = 'weather_rain_body';
+  static const kWeatherColdBody = 'weather_cold_body';
 
   static Map<String, String> _values = const {};
   static bool _loaded = false;
@@ -168,10 +173,18 @@ class RemoteConfig {
     return parts.map(TimeOfDayLike.parse).toList();
   }
 
-  /// 模板替换：{herName} / {dishName} 占位符
-  static String format(String template, {String dishName = ''}) => template
-      .replaceAll('{herName}', herName)
-      .replaceAll('{dishName}', dishName);
+  /// 模板替换：{herName} / {dishName} / {dayWeather} / {dayTemp} 占位符
+  static String format(
+    String template, {
+    String dishName = '',
+    String dayWeather = '',
+    String dayTemp = '',
+  }) =>
+      template
+          .replaceAll('{herName}', herName)
+          .replaceAll('{dishName}', dishName)
+          .replaceAll('{dayWeather}', dayWeather)
+          .replaceAll('{dayTemp}', dayTemp);
 
   // ---------- 常用配置便捷属性 ----------
 
@@ -208,4 +221,15 @@ class RemoteConfig {
   static bool get waterEnabled => getBool(kWaterEnabled, fallback: true);
   static bool get nightEnabled => getBool(kNightEnabled, fallback: true);
   static bool get dishEnabled => getBool(kDishEnabled, fallback: true);
+
+  // 天气关怀提醒（默认早 8 点，明天有雨或降温时才提醒）
+  static TimeOfDayLike get weatherTime =>
+      getTime(kWeatherTime, fallback: const TimeOfDayLike(hour: 8, minute: 0));
+  static bool get weatherEnabled => getBool(kWeatherEnabled, fallback: true);
+  static String get weatherTitle =>
+      get(kWeatherTitle, fallback: '今日天气关怀');
+  static String get weatherRainBody =>
+      get(kWeatherRainBody, fallback: '今天{dayWeather}，出门记得带伞 ⭐');
+  static String get weatherColdBody =>
+      get(kWeatherColdBody, fallback: '今天降温到 {dayTemp}°，记得多穿一点 ⭐');
 }

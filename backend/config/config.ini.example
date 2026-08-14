@@ -3,6 +3,9 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 MAP_KEY=你的高德Web服务Key
 
+# 天气查询城市编码（adcode），缺省 320100（南京）
+WEATHER_ADCODE=320100
+
 # API 鉴权令牌（APP 请求头 X-Api-Token，与 app/lib/config/app_config.dart 的 apiToken 保持一致）
 API_TOKEN=clw-api-8f3k2j9h4g5d6s7a
 

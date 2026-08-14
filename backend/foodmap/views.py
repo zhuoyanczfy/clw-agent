@@ -879,6 +879,12 @@ APP_CONFIG_DEFAULTS = {
     'water_enabled': '1',
     'night_enabled': '1',
     'dish_enabled': '1',
+    # 天气关怀提醒（{dayWeather} / {dayTemp} 会被替换）
+    'weather_enabled': '1',
+    'weather_time': '08:00',
+    'weather_title': '今日天气关怀',
+    'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
+    'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
 }
 
 
@@ -889,6 +895,22 @@ def api_config(request):
     config = dict(APP_CONFIG_DEFAULTS)
     config.update(overrides)
     return JsonResponse({'config': config})
+
+
+# ============ 天气预报 ============
+
+
+@require_api_token
+def api_weather(request):
+    """天气查询：代理高德（实况 30min / 预报 3h 进程内缓存），
+    供首页天气展示与天气关怀提醒使用。"""
+    from .services.amap import AMAPError
+    from .services.weather import get_weather
+
+    try:
+        return JsonResponse(get_weather())
+    except AMAPError as exc:
+        return JsonResponse({'error': str(exc)}, status=502)
 
 
 # ============ 加载页图片 ============

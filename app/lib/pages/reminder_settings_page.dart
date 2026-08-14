@@ -18,9 +18,11 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
   late bool _waterEnabled;
   late bool _nightEnabled;
   late bool _dishEnabled;
+  late bool _weatherEnabled;
   late List<TimeOfDayLike> _waterTimes;
   late TimeOfDayLike _nightTime;
   late TimeOfDayLike _dishTime;
+  late TimeOfDayLike _weatherTime;
   bool _busy = false;
 
   @override
@@ -33,9 +35,11 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
     _waterEnabled = RemoteConfig.waterEnabled;
     _nightEnabled = RemoteConfig.nightEnabled;
     _dishEnabled = RemoteConfig.dishEnabled;
+    _weatherEnabled = RemoteConfig.weatherEnabled;
     _waterTimes = List.of(RemoteConfig.waterTimes);
     _nightTime = RemoteConfig.nightTime;
     _dishTime = RemoteConfig.dishTime;
+    _weatherTime = RemoteConfig.weatherTime;
   }
 
   /// 保存一项配置并重排通知（容错，失败只提示不阻断）
@@ -72,6 +76,15 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
       _busy = true;
     });
     await _apply(RemoteConfig.kDishEnabled, on ? '1' : '0');
+    if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _toggleWeather(bool on) async {
+    setState(() {
+      _weatherEnabled = on;
+      _busy = true;
+    });
+    await _apply(RemoteConfig.kWeatherEnabled, on ? '1' : '0');
     if (mounted) setState(() => _busy = false);
   }
 
@@ -137,6 +150,13 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
     });
   }
 
+  Future<void> _editWeatherTime() async {
+    await _pickTime(_weatherTime, (t) async {
+      setState(() => _weatherTime = t);
+      await _apply(RemoteConfig.kWeatherTime, t.label);
+    });
+  }
+
   Future<void> _editCopy({
     required String emoji,
     required String title,
@@ -197,6 +217,77 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
     ).showSnackBar(const SnackBar(content: Text('文案已更新'), duration: Duration(seconds: 2)));
   }
 
+  /// 天气提醒文案编辑：标题 + 雨天文案 + 降温文案三个输入框。
+  Future<void> _editWeatherCopy() async {
+    final titleCtrl = TextEditingController(
+      text: RemoteConfig.get(RemoteConfig.kWeatherTitle, fallback: ''),
+    );
+    final rainCtrl = TextEditingController(
+      text: RemoteConfig.get(RemoteConfig.kWeatherRainBody, fallback: ''),
+    );
+    final coldCtrl = TextEditingController(
+      text: RemoteConfig.get(RemoteConfig.kWeatherColdBody, fallback: ''),
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('☀️ 编辑天气提醒文案'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                maxLength: 20,
+                decoration: const InputDecoration(
+                  labelText: '通知标题',
+                  hintText: '比如：今日天气关怀',
+                  isDense: true,
+                ),
+              ),
+              TextField(
+                controller: rainCtrl,
+                maxLength: 60,
+                decoration: const InputDecoration(
+                  labelText: '雨天文案（明天有雨时发）',
+                  hintText: '支持 {dayWeather} 占位符（明日天气现象）',
+                  isDense: true,
+                ),
+              ),
+              TextField(
+                controller: coldCtrl,
+                maxLength: 60,
+                decoration: const InputDecoration(
+                  labelText: '降温文案（明天降温≥5°时发）',
+                  hintText: '支持 {dayTemp} 占位符（明日温度）',
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存', style: TextStyle(color: AppTheme.primaryDark)),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    await _apply(RemoteConfig.kWeatherTitle, titleCtrl.text.trim());
+    await _apply(RemoteConfig.kWeatherRainBody, rainCtrl.text.trim());
+    await _apply(RemoteConfig.kWeatherColdBody, coldCtrl.text.trim());
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('文案已更新'), duration: Duration(seconds: 2)));
+  }
+
   Future<void> _resetAll() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -233,15 +324,20 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
     final hasOverride = RemoteConfig.hasOverride(RemoteConfig.kWaterEnabled) ||
         RemoteConfig.hasOverride(RemoteConfig.kNightEnabled) ||
         RemoteConfig.hasOverride(RemoteConfig.kDishEnabled) ||
+        RemoteConfig.hasOverride(RemoteConfig.kWeatherEnabled) ||
         RemoteConfig.hasOverride(RemoteConfig.kWaterTimes) ||
         RemoteConfig.hasOverride(RemoteConfig.kNightTime) ||
         RemoteConfig.hasOverride(RemoteConfig.kDishTime) ||
+        RemoteConfig.hasOverride(RemoteConfig.kWeatherTime) ||
         RemoteConfig.hasOverride(RemoteConfig.kWaterTitle) ||
         RemoteConfig.hasOverride(RemoteConfig.kWaterBody) ||
         RemoteConfig.hasOverride(RemoteConfig.kNightTitle) ||
         RemoteConfig.hasOverride(RemoteConfig.kNightBody) ||
         RemoteConfig.hasOverride(RemoteConfig.kDishTitle) ||
-        RemoteConfig.hasOverride(RemoteConfig.kDishBody);
+        RemoteConfig.hasOverride(RemoteConfig.kDishBody) ||
+        RemoteConfig.hasOverride(RemoteConfig.kWeatherTitle) ||
+        RemoteConfig.hasOverride(RemoteConfig.kWeatherRainBody) ||
+        RemoteConfig.hasOverride(RemoteConfig.kWeatherColdBody);
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -269,6 +365,8 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
             _buildNightCard(),
             const SizedBox(height: 14),
             _buildDishCard(),
+            const SizedBox(height: 14),
+            _buildWeatherCard(),
             const SizedBox(height: 20),
             if (hasOverride)
               SquishyTap(
@@ -400,6 +498,30 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
         titleKey: RemoteConfig.kDishTitle,
         bodyKey: RemoteConfig.kDishBody,
       ),
+    );
+  }
+
+  Widget _buildWeatherCard() {
+    return _card(
+      emoji: '☀️',
+      title: '天气关怀提醒',
+      enabled: _weatherEnabled,
+      onToggle: _toggleWeather,
+      trailing: Row(
+        children: [
+          const Text(
+            '提醒时间（明天有雨或降温时才会提醒）',
+            style: TextStyle(fontSize: 12, color: AppTheme.textLight),
+          ),
+          const Spacer(),
+          ActionChip(
+            avatar: const Icon(Icons.schedule, size: 16),
+            label: Text(_weatherTime.label),
+            onPressed: _weatherEnabled ? _editWeatherTime : null,
+          ),
+        ],
+      ),
+      onEditCopy: _editWeatherCopy,
     );
   }
 

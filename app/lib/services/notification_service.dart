@@ -3,9 +3,11 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/pet.dart';
+import '../models/weather.dart';
 import 'dish_service.dart';
 import 'foodmap_api.dart';
 import 'remote_config.dart';
+import 'weather_service.dart';
 
 /// 定时通知服务：每天定时推送喝水、晚安、美食推荐提醒。
 /// 使用 flutter_local_notifications 的原生定时调度，
@@ -19,6 +21,7 @@ class NotificationService {
   static const int _nightId = 200;
   static const int _dishId = 300;
   static const int _petBaseId = 400;
+  static const int _weatherId = 500;
 
   /// 已调度提醒的宠物事项 id（重新调度时用于取消被删除/改期的事项）
   static final Set<int> _scheduledPetEventIds = <int>{};
@@ -83,6 +86,46 @@ class NotificationService {
         hour: RemoteConfig.dishTime.hour,
         minute: RemoteConfig.dishTime.minute,
       );
+    }
+
+    if (RemoteConfig.weatherEnabled) {
+      await _scheduleWeather();
+    }
+  }
+
+  /// 天气关怀提醒：拉取天气，明天有雨或降温（≥5°）才排明早的通知；
+  /// 条件不满足或拉取失败则不排（下次启动/改设置时重新评估）。
+  static Future<void> _scheduleWeather() async {
+    try {
+      final weather = await WeatherService.fetchWeather();
+      final t = weather.tomorrow;
+      if (t == null) return;
+      final rainy =
+          WeatherLive.isRainy(t.dayWeather) || WeatherLive.isRainy(t.nightWeather);
+      final todayTemp = double.tryParse(weather.live.temperature) ?? 0;
+      final tomorrowTemp = double.tryParse(t.dayTemp) ?? todayTemp;
+      final cold = todayTemp - tomorrowTemp >= 5;
+      if (!rainy && !cold) return;
+      String body;
+      if (rainy && cold) {
+        body = '${RemoteConfig.format(RemoteConfig.weatherRainBody, dayWeather: t.dayWeather)} '
+            '${RemoteConfig.format(RemoteConfig.weatherColdBody, dayTemp: t.dayTemp)}';
+      } else if (rainy) {
+        body = RemoteConfig.format(RemoteConfig.weatherRainBody,
+            dayWeather: t.dayWeather);
+      } else {
+        body = RemoteConfig.format(RemoteConfig.weatherColdBody,
+            dayTemp: t.dayTemp);
+      }
+      await _scheduleDaily(
+        id: _weatherId,
+        title: RemoteConfig.weatherTitle,
+        body: body,
+        hour: RemoteConfig.weatherTime.hour,
+        minute: RemoteConfig.weatherTime.minute,
+      );
+    } catch (_) {
+      // 天气拉取失败：本次不排天气提醒
     }
   }
 

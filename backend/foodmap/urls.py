@@ -39,6 +39,8 @@ urlpatterns = [
     path('api/recommend/verify/', views.api_recommend_verify, name='recommend_verify'),
     # APP 云端配置
     path('api/config/', views.api_config, name='config'),
+    # 天气预报
+    path('api/weather/', views.api_weather, name='weather'),
     # 加载页图片
     path('api/splash/', views.api_splash, name='splash'),
     path('api/splash/upload/', views.api_splash_upload, name='splash_upload'),

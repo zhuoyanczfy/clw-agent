@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 
 import '../models/dish.dart';
 import '../models/pet.dart';
+import '../models/weather.dart';
 import '../services/dish_service.dart';
 import '../services/foodmap_api.dart';
 import '../services/remote_config.dart';
+import '../services/weather_service.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
@@ -23,6 +25,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   Dish? _todayDish;
   Pet? _pet;
+  WeatherInfo? _weather;
 
   @override
   void initState() {
@@ -35,11 +38,18 @@ class _HomePageState extends State<HomePage> {
       DishService.getTodayDish(),
       FoodmapApi.fetchPets().catchError((_) => <Pet>[]),
     ]);
+    WeatherInfo? weather;
+    try {
+      weather = await WeatherService.fetchWeather();
+    } catch (_) {
+      // 天气拉取失败静默降级（不展示天气条）
+    }
     if (!mounted) return;
     setState(() {
       _todayDish = results[0] as Dish?;
       final pets = results[1] as List<Pet>;
       _pet = pets.isEmpty ? null : pets.first;
+      _weather = weather;
     });
   }
 
@@ -157,6 +167,10 @@ class _HomePageState extends State<HomePage> {
               '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
               style: const TextStyle(fontSize: 13, color: Color(0xFFFFF7E0)),
             ),
+            if (_weather != null) ...[
+              const SizedBox(height: 14),
+              _buildWeatherBar(_weather!),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
@@ -198,6 +212,44 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ---- 天气条（并入天数卡） ----
+  Widget _buildWeatherBar(WeatherInfo w) {
+    final live = w.live;
+    final t = w.tomorrow;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Text(
+            WeatherLive.emoji(live.weather),
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${live.city} · ${live.weather} ${live.temperature}°',
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (t != null)
+            Text(
+              '明日 ${WeatherLive.emoji(t.dayWeather)} ${t.nightTemp}~${t.dayTemp}°',
+              style: const TextStyle(fontSize: 12, color: Color(0xFFFFF7E0)),
+            ),
+        ],
       ),
     );
   }
