@@ -1025,7 +1025,7 @@ def _generate_reading(card_name, keyword, orientation, her_name):
         {
             'role': 'system',
             'content': (
-                '你是一位温柔神秘的塔罗占卜师，为心爱的人解读每日塔罗牌。'
+                '你是一位温柔神秘的塔罗占卜师。'
                 '语气温暖治愈、带一点神秘感。禁止使用Markdown格式，直接输出纯文本。'
             ),
         },
