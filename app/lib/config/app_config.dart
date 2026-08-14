@@ -19,6 +19,9 @@ class AppConfig {
   /// 运行后可在设置页修改并保存到本机（覆盖默认值），无需重新打包。
   static const String serverUrl = 'http://139.196.27.224';
 
+  /// API 鉴权令牌（与后端 backend/config/config.ini 的 API_TOKEN 保持一致）
+  static const String apiToken = 'clw-api-8f3k2j9h4g5d6s7a';
+
   /// 今日美食卡片的标题前缀（专属感文案）
   static const String dailyDishTitle = '今天想带你吃';
 }

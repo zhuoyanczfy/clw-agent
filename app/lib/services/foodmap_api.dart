@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../config/app_config.dart';
 import '../models/dining_record.dart';
 import '../models/district.dart';
 import '../models/pet.dart';
@@ -37,49 +38,47 @@ class FoodmapApi {
     throw ApiException(msg);
   }
 
-  static Future<dynamic> _getJson(String path) async {
+  /// 统一请求入口：自动附带鉴权头、处理超时与错误。
+  static Future<dynamic> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final resp = await http
-        .get(_uri(base, path))
-        .timeout(const Duration(seconds: 15));
-    if (resp.statusCode != 200) _throw(resp);
-    return jsonDecode(utf8.decode(resp.bodyBytes));
-  }
-
-  static Future<dynamic> _postJson(String path, [Map<String, dynamic>? body]) async {
-    final base = await _base();
-    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final resp = await http
-        .post(
-          _uri(base, path),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(const Duration(seconds: 30));
+    final headers = <String, String>{'X-Api-Token': AppConfig.apiToken};
+    http.Response resp;
+    switch (method) {
+      case 'GET':
+        resp = await http.get(_uri(base, path), headers: headers).timeout(timeout);
+      case 'DELETE':
+        resp = await http.delete(_uri(base, path), headers: headers).timeout(timeout);
+      case 'POST':
+      case 'PUT':
+        headers['Content-Type'] = 'application/json';
+        final req = method == 'POST'
+            ? http.post(_uri(base, path), headers: headers, body: jsonEncode(body ?? {}))
+            : http.put(_uri(base, path), headers: headers, body: jsonEncode(body ?? {}));
+        resp = await req.timeout(timeout);
+      default:
+        throw ApiException('不支持的请求方法: $method');
+    }
     if (resp.statusCode >= 300) _throw(resp);
     return jsonDecode(utf8.decode(resp.bodyBytes));
   }
 
-  static Future<dynamic> _putJson(String path, Map<String, dynamic> body) async {
-    final base = await _base();
-    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final resp = await http
-        .put(
-          _uri(base, path),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 30));
-    if (resp.statusCode >= 300) _throw(resp);
-    return jsonDecode(utf8.decode(resp.bodyBytes));
-  }
+  static Future<dynamic> _getJson(String path) =>
+      _request('GET', path, timeout: const Duration(seconds: 15));
+
+  static Future<dynamic> _postJson(String path, [Map<String, dynamic>? body]) =>
+      _request('POST', path, body: body);
+
+  static Future<dynamic> _putJson(String path, Map<String, dynamic> body) =>
+      _request('PUT', path, body: body);
 
   static Future<void> _deleteJson(String path) async {
-    final base = await _base();
-    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final resp = await http.delete(_uri(base, path)).timeout(const Duration(seconds: 30));
-    if (resp.statusCode >= 300) _throw(resp);
+    await _request('DELETE', path);
   }
 
   // ---------- 健康检查 ----------
@@ -88,7 +87,12 @@ class FoodmapApi {
     try {
       final base = await _base();
       if (base.isEmpty) return false;
-      final resp = await http.get(_uri(base, '/api/health/')).timeout(const Duration(seconds: 5));
+      final resp = await http
+          .get(
+            _uri(base, '/api/health/'),
+            headers: {'X-Api-Token': AppConfig.apiToken},
+          )
+          .timeout(const Duration(seconds: 5));
       return resp.statusCode == 200;
     } catch (_) {
       return false;
@@ -108,7 +112,12 @@ class FoodmapApi {
   /// 南京区划 GeoJSON（flutter_map 分区高亮）
   static Future<Map<String, dynamic>> fetchDistrictsGeoJson() async {
     final base = await _base();
-    final resp = await http.get(_uri(base, '/api/districts.geojson')).timeout(const Duration(seconds: 15));
+    final resp = await http
+        .get(
+          _uri(base, '/api/districts.geojson'),
+          headers: {'X-Api-Token': AppConfig.apiToken},
+        )
+        .timeout(const Duration(seconds: 15));
     if (resp.statusCode != 200) throw ApiException('区划数据加载失败(${resp.statusCode})');
     return jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
   }
@@ -119,7 +128,9 @@ class FoodmapApi {
       if (district != null && district.isNotEmpty) 'district': district,
       if (visitedOnly) 'visited': '1',
     };
-    final query = params.isEmpty ? '' : '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+    final query = params.isEmpty
+        ? ''
+        : '?${params.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
     final json = await _getJson('/api/restaurants/$query') as Map<String, dynamic>;
     return (json['restaurants'] as List)
         .map((e) => Restaurant.fromJson(e as Map<String, dynamic>))
@@ -195,7 +206,8 @@ class FoodmapApi {
   static Future<List<RecordPhoto>> uploadPhotos(int recordId, List<String> filePaths) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final request = http.MultipartRequest('POST', _uri(base, '/api/records/$recordId/photos/'));
+    final request = http.MultipartRequest('POST', _uri(base, '/api/records/$recordId/photos/'))
+      ..headers['X-Api-Token'] = AppConfig.apiToken;
     for (final path in filePaths) {
       request.files.add(await http.MultipartFile.fromPath('photos', path));
     }
@@ -210,16 +222,21 @@ class FoodmapApi {
 
   static Future<void> deletePhoto(int photoId) => _deleteJson('/api/records/photos/$photoId/');
 
-  /// 照片完整地址（后端返回相对路径，需拼接服务地址）
-  static Future<String> photoUrl(String path) async {
-    final base = await _base();
-    return '$base$path';
-  }
+  /// 照片完整地址（后端返回相对路径，需拼接服务地址）。
+  ///
+  /// 带内存缓存：同一相对路径只拼一次，避免列表页每张照片都触发
+  /// SharedPreferences 读取。
+  static final Map<String, String> _mediaUrlCache = {};
 
-  /// 媒体文件完整地址（加载页等相对路径，需拼接服务地址）
+  static Future<String> photoUrl(String path) => mediaUrl(path);
+
   static Future<String> mediaUrl(String path) async {
+    final cached = _mediaUrlCache[path];
+    if (cached != null) return cached;
     final base = await _base();
-    return '$base$path';
+    final url = '$base$path';
+    _mediaUrlCache[path] = url;
+    return url;
   }
 
   // ---------- APP 云端配置 ----------
@@ -306,6 +323,7 @@ class FoodmapApi {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
     final request = http.MultipartRequest('POST', _uri(base, '/api/pets/'))
+      ..headers['X-Api-Token'] = AppConfig.apiToken
       ..fields['name'] = name
       ..fields['breed'] = breed
       ..fields['gender'] = gender
@@ -336,6 +354,7 @@ class FoodmapApi {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
     final request = http.MultipartRequest('POST', _uri(base, '/api/pets/$id/'))
+      ..headers['X-Api-Token'] = AppConfig.apiToken
       ..fields['name'] = name
       ..fields['breed'] = breed
       ..fields['gender'] = gender
@@ -371,6 +390,7 @@ class FoodmapApi {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
     final request = http.MultipartRequest('POST', _uri(base, '/api/pets/$petId/photos/'))
+      ..headers['X-Api-Token'] = AppConfig.apiToken
       ..fields['caption'] = caption;
     for (final path in filePaths) {
       request.files.add(await http.MultipartFile.fromPath('images', path));
@@ -429,6 +449,7 @@ class FoodmapApi {
     final client = http.Client();
     try {
       final request = http.Request('POST', _uri(base, '/api/recommend/chat/'))
+        ..headers['X-Api-Token'] = AppConfig.apiToken
         ..headers['Content-Type'] = 'application/json'
         ..headers['Accept'] = 'text/event-stream'
         ..body = jsonEncode({'message': message, 'history': history});
@@ -441,7 +462,12 @@ class FoodmapApi {
         if (!line.startsWith('data: ')) continue;
         final payload = line.substring(6);
         if (payload == '[DONE]') break;
-        final json = jsonDecode(payload) as Map<String, dynamic>;
+        Map<String, dynamic> json;
+        try {
+          json = jsonDecode(payload) as Map<String, dynamic>;
+        } catch (_) {
+          continue; // 忽略非 JSON 行，继续读下一行
+        }
         if (json['error'] != null) throw ApiException(json['error'].toString());
         final delta = json['delta']?.toString() ?? '';
         if (delta.isNotEmpty) yield delta;

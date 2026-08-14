@@ -14,6 +14,17 @@ app/android/build/
 # 生成的图标预览
 app/icon_preview.png
 
+# 根目录误生成的 Flutter 脚手架（项目真身在 app/，勿在根目录执行 flutter create）
+/.dart_tool/
+/lib/
+/test/
+/windows/
+/.metadata
+/analysis_options.yaml
+/pubspec.yaml
+/pubspec.lock
+/*.iml
+
 # ---- Python ----
 __pycache__/
 *.py[cod]

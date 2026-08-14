@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """纯 API 视图：为 Flutter APP 提供数据接口（网页版已移除）。"""
+import configparser
+import datetime
+import hashlib
 import json
 import os
+import random
 from pathlib import Path
 
 from django import forms
@@ -11,6 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .auth import require_api_token
 from .models import (
     AppConfig,
     DiningRecord,
@@ -56,8 +61,6 @@ def _dish_json(d):
 
 def dish_for_date(date_str):
     """按日期从数据库菜库取一道菜（md5(日期) 取模，与 APP 内置算法一致）。"""
-    import hashlib
-
     dishes = list(Dish.objects.filter(enabled=True).order_by('sort', 'id'))
     if not dishes:
         return None
@@ -65,6 +68,7 @@ def dish_for_date(date_str):
     return dishes[seed % len(dishes)]
 
 
+@require_api_token
 def api_dishes(request):
     """全部启用菜品（每日推荐数据源）。"""
     dishes = [
@@ -74,10 +78,9 @@ def api_dishes(request):
     return JsonResponse({'total': len(dishes), 'dishes': dishes})
 
 
+@require_api_token
 def api_dish_today(request):
     """今日推荐（与 APP 内置算法一致：md5(日期) 取模）。"""
-    import datetime
-
     today = datetime.date.today().isoformat()
     dish = dish_for_date(today)
     return JsonResponse(
@@ -85,10 +88,9 @@ def api_dish_today(request):
     )
 
 
+@require_api_token
 def api_dish_by_date(request, date):
     """指定日期的推荐，date 形如 2026-08-10。"""
-    import datetime
-
     try:
         datetime.date.fromisoformat(date)
     except ValueError:
@@ -102,6 +104,7 @@ def api_dish_by_date(request, date):
 # ============ 美食收藏 ============
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_favorites(request):
@@ -124,6 +127,7 @@ def api_favorites(request):
     return JsonResponse({'ok': True})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_favorite_delete(request, slug):
@@ -142,6 +146,7 @@ def _district_stats():
     ).order_by('id')
 
 
+@require_api_token
 def api_districts(request):
     """全部区（含区内餐厅库数量 / 去过餐厅数）。"""
     data = [
@@ -154,10 +159,14 @@ def api_districts(request):
     return JsonResponse({'districts': data})
 
 
+@require_api_token
 def api_districts_geojson(request):
-    """南京区划 GeoJSON（flutter_map 分区高亮用），附加区内统计。"""
-    with GEOJSON_PATH.open(encoding='utf-8') as f:
-        geojson = json.load(f)
+    """南京区划 GeoJSON（flutter_map 分区高亮用），附加区内统计。
+
+    GeoJSON 文件不常变，用 mtime 指纹缓存避免每次请求都读磁盘；
+    餐厅/足迹统计每次实时查询（数据量小，保证准确）。
+    """
+    geojson = _cached_geojson()
     stats = {
         d.adcode: (
             d.restaurants.count(),
@@ -171,6 +180,19 @@ def api_districts_geojson(request):
         props['adcode'] = adcode
         props['restaurant_count'], props['visited_count'] = stats.get(adcode, (0, 0))
     return JsonResponse(geojson)
+
+
+_geojson_cache = {'mtime': None, 'data': None}
+
+
+def _cached_geojson():
+    """按 mtime 缓存 GeoJSON，文件变更后自动失效。"""
+    mtime = GEOJSON_PATH.stat().st_mtime
+    if _geojson_cache['mtime'] != mtime or _geojson_cache['data'] is None:
+        with GEOJSON_PATH.open(encoding='utf-8') as f:
+            _geojson_cache['data'] = json.load(f)
+        _geojson_cache['mtime'] = mtime
+    return _geojson_cache['data']
 
 
 def _restaurant_json(r, with_records=False):
@@ -201,6 +223,7 @@ def _restaurant_json(r, with_records=False):
     return data
 
 
+@require_api_token
 def api_restaurants(request):
     """餐厅列表。?district=区名 过滤；?visited=1 只看去过（地图标记用）。"""
     qs = Restaurant.objects.select_related('district').annotate(rec_count=Count('records'))
@@ -213,6 +236,7 @@ def api_restaurants(request):
     return JsonResponse({'restaurants': [_restaurant_json(r) for r in qs]})
 
 
+@require_api_token
 def api_restaurant_detail(request, restaurant_id):
     """餐厅详情 + 全部用餐记录。"""
     restaurant = get_object_or_404(
@@ -279,9 +303,8 @@ def _record_from_data(data, record=None):
         if key == 'date':
             if not fields[key]:
                 raise ValueError('用餐日期不能为空')
-            import datetime as _dt
             try:
-                fields[key] = _dt.date.fromisoformat(fields[key])
+                fields[key] = datetime.date.fromisoformat(fields[key])
             except ValueError:
                 raise ValueError('用餐日期格式应为 YYYY-MM-DD')
     if record:
@@ -291,6 +314,7 @@ def _record_from_data(data, record=None):
     return DiningRecord(**fields)
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_records(request):
@@ -318,6 +342,7 @@ def api_records(request):
     return JsonResponse({'ok': True, 'record': _record_json(record)}, status=201)
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'PUT', 'DELETE'])
 def api_record_detail(request, record_id):
@@ -353,6 +378,7 @@ def api_record_detail(request, record_id):
     return JsonResponse({'ok': True, 'record': _record_json(record)})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
 def api_photo_upload(request, record_id):
@@ -370,6 +396,7 @@ def api_photo_upload(request, record_id):
     return JsonResponse({'ok': True, 'photos': saved})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_photo_delete(request, photo_id):
@@ -412,6 +439,7 @@ def _parse_per_capita(value):
     return None
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_wishlist(request):
@@ -461,6 +489,7 @@ def api_wishlist(request):
     return JsonResponse({'ok': True, 'item': _wishlist_json(item)}, status=201)
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
 def api_wishlist_eaten(request, item_id):
@@ -471,6 +500,7 @@ def api_wishlist_eaten(request, item_id):
     return JsonResponse({'ok': True, 'item': _wishlist_json(item)})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_wishlist_delete(request, item_id):
@@ -485,8 +515,6 @@ def api_wishlist_delete(request, item_id):
 
 def _parse_date(value):
     """解析 YYYY-MM-DD，空串/非法返回 None。"""
-    import datetime
-
     s = (value or '').strip()
     if not s:
         return None
@@ -539,6 +567,7 @@ def _clean_image(field, f, label):
     return None
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_pets(request):
@@ -567,6 +596,7 @@ def api_pets(request):
     return JsonResponse({'ok': True, 'pet': _pet_json(pet)}, status=201)
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST', 'DELETE'])
 def api_pet_detail(request, pet_id):
@@ -614,6 +644,7 @@ def api_pet_detail(request, pet_id):
     return JsonResponse({'ok': True, 'pet': _pet_json(pet)})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_pet_photos(request, pet_id):
@@ -637,6 +668,7 @@ def api_pet_photos(request, pet_id):
     )
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_pet_photo_delete(request, photo_id):
@@ -651,6 +683,7 @@ def api_pet_photo_delete(request, photo_id):
     return JsonResponse({'ok': True})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_pet_events(request, pet_id):
@@ -690,6 +723,7 @@ def api_pet_events(request, pet_id):
     return JsonResponse({'ok': True, 'event': _pet_event_json(event)}, status=201)
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_pet_event_delete(request, event_id):
@@ -705,6 +739,7 @@ MAX_HISTORY = 20
 TOOLS_SCHEMA = tools_schema()
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
 def api_recommend_verify(request):
@@ -757,6 +792,7 @@ def api_recommend_verify(request):
     return JsonResponse({'ok': True, 'items': results})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
 def api_chat(request):
@@ -806,6 +842,12 @@ def api_chat(request):
         except LLMError as exc:
             yield f'data: {json.dumps({"error": str(exc)}, ensure_ascii=False)}\n\n'
             yield 'data: [DONE]\n\n'
+        except Exception as exc:
+            # 非 LLM 异常（网络超时、工具执行失败等）兜底，避免流异常终止
+            import logging
+            logging.getLogger(__name__).exception('SSE 流式聊天异常')
+            yield f'data: {json.dumps({"error": f"推荐官暂时开小差了：{exc}"}, ensure_ascii=False)}\n\n'
+            yield 'data: [DONE]\n\n'
 
     response = StreamingHttpResponse(sse_generator(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
@@ -840,6 +882,7 @@ APP_CONFIG_DEFAULTS = {
 }
 
 
+@require_api_token
 def api_config(request):
     """APP 云端配置：后端默认值 + Admin 覆盖值合并返回。"""
     overrides = dict(AppConfig.objects.values_list('key', 'value'))
@@ -853,11 +896,12 @@ def api_config(request):
 
 def _upload_token():
     """读取 config.ini 默认节的上传令牌（UPLOAD_TOKEN），供内容上传接口鉴权。"""
-    import configparser
-
     from config.settings import BASE_DIR
     parser = configparser.ConfigParser()
-    parser.read_string('[default]\n' + (BASE_DIR / 'config' / 'config.ini').read_text(encoding='utf-8'))
+    parser.read_string(
+        '[default]\n'
+        + (BASE_DIR / 'config' / 'config.ini').read_text(encoding='utf-8')
+    )
     return parser.get('default', 'upload_token', fallback='').strip()
 
 
@@ -865,11 +909,9 @@ def _splash_json(img):
     return {'id': img.pk, 'title': img.title, 'url': img.image.url}
 
 
+@require_api_token
 def api_splash(request):
     """当日加载页图片：同一天内固定一张，次日随机换一张（保证相邻两天不重复）。"""
-    import datetime
-    import random
-
     images = list(SplashImage.objects.filter(enabled=True))
     if not images:
         return JsonResponse({'error': '还没有加载页图片，请先在后台或上传接口添加'}, status=404)
@@ -891,6 +933,7 @@ def api_splash(request):
     return JsonResponse({'splash': _splash_json(img)})
 
 
+@require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
 def api_splash_upload(request):

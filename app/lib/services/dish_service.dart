@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_config.dart';
 import '../data/dishes.dart';
 import '../models/dish.dart';
 import 'api_config.dart';
@@ -19,7 +20,10 @@ class DishService {
     if (base.isNotEmpty) {
       try {
         final resp = await http
-            .get(Uri.parse('$base/api/dish/today/'))
+            .get(
+              Uri.parse('$base/api/dish/today/'),
+              headers: {'X-Api-Token': AppConfig.apiToken},
+            )
             .timeout(const Duration(seconds: 5));
         if (resp.statusCode == 200) {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -41,7 +45,10 @@ class DishService {
     if (base.isNotEmpty) {
       try {
         final resp = await http
-            .get(Uri.parse('$base/api/dishes/'))
+            .get(
+              Uri.parse('$base/api/dishes/'),
+              headers: {'X-Api-Token': AppConfig.apiToken},
+            )
             .timeout(const Duration(seconds: 5));
         if (resp.statusCode == 200) {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -77,7 +84,10 @@ class DishService {
     if (base.isNotEmpty) {
       try {
         final resp = await http
-            .get(Uri.parse('$base/api/favorites/'))
+            .get(
+              Uri.parse('$base/api/favorites/'),
+              headers: {'X-Api-Token': AppConfig.apiToken},
+            )
             .timeout(const Duration(seconds: 5));
         if (resp.statusCode == 200) {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -118,16 +128,20 @@ class DishService {
     final base = await ApiConfig.getBaseUrl();
     if (base.isNotEmpty) {
       try {
+        final headers = {
+          'Content-Type': 'application/json',
+          'X-Api-Token': AppConfig.apiToken,
+        };
         final resp = adding
             ? await http
                 .post(
                   Uri.parse('$base/api/favorites/'),
-                  headers: {'Content-Type': 'application/json'},
+                  headers: headers,
                   body: jsonEncode({'slug': slug}),
                 )
                 .timeout(const Duration(seconds: 5))
             : await http
-                .delete(Uri.parse('$base/api/favorites/$slug/'))
+                .delete(Uri.parse('$base/api/favorites/$slug/'), headers: headers)
                 .timeout(const Duration(seconds: 5));
         return resp.statusCode == 200;
       } catch (_) {
@@ -142,7 +156,10 @@ class DishService {
       await http
           .post(
             Uri.parse('$base/api/favorites/'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Token': AppConfig.apiToken,
+            },
             body: jsonEncode({'slug': slug}),
           )
           .timeout(const Duration(seconds: 5));

@@ -19,7 +19,7 @@ class District(models.Model):
 class Restaurant(models.Model):
     """餐厅，隶属某个区；lat/lng 可选，有坐标时在地图上标记。"""
 
-    name = models.CharField('餐厅名称', max_length=100)
+    name = models.CharField('餐厅名称', max_length=100, db_index=True)
     district = models.ForeignKey(
         District, on_delete=models.CASCADE, related_name='restaurants', verbose_name='所属区'
     )
@@ -246,6 +246,10 @@ class DiningRecord(models.Model):
         verbose_name = '用餐记录'
         verbose_name_plural = '用餐记录'
         ordering = ['-date', '-id']
+        indexes = [
+            models.Index(fields=['restaurant', 'date'], name='record_rest_date_idx'),
+            models.Index(fields=['-date'], name='record_date_idx'),
+        ]
 
     def __str__(self):
         return f'{self.restaurant.name} · {self.date}'
@@ -281,7 +285,7 @@ class WishlistItem(models.Model):
         ('manual', '手动添加'),
     ]
 
-    name = models.CharField('餐厅名称', max_length=100)
+    name = models.CharField('餐厅名称', max_length=100, db_index=True)
     amap_id = models.CharField('高德POI ID', max_length=50, null=True, blank=True)
     district = models.ForeignKey(
         District, on_delete=models.SET_NULL, null=True, blank=True,
@@ -289,7 +293,7 @@ class WishlistItem(models.Model):
     )
     reason = models.CharField('推荐理由', max_length=300, blank=True)
     per_capita = models.PositiveIntegerField('人均消费(元)', null=True, blank=True)
-    status = models.CharField('状态', max_length=10, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField('状态', max_length=10, choices=STATUS_CHOICES, default='pending', db_index=True)
     source = models.CharField('来源', max_length=10, choices=SOURCE_CHOICES, default='ai')
     created_at = models.DateTimeField('收藏时间', auto_now_add=True)
 
