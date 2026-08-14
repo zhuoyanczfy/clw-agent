@@ -1,4 +1,4 @@
-# 专属美食关怀（clw-agent）
+# 光旅之盘 · Compass of Light & Wanderlust（clw-agent）
 
 为她定制的一套美食系礼物：
 
@@ -18,7 +18,7 @@ clw_agent/
 │   │   ├── models/                  # 区 / 餐厅 / 用餐记录 / 待尝清单 数据模型
 │   │   ├── services/                # Django API 客户端 + 通知服务 + 后端地址配置
 │   │   └── pages/                   # 首页 / 美食 / 足迹 / 推荐官 / 设置
-│   └── android/             # 安卓工程（应用名「专属美食关怀」）
+│   └── android/             # 安卓工程（应用名「光旅之盘」）
 └── backend/                 # Django 4.2 纯 API 后端（南京美食足迹数据中枢）
     ├── config/              # Django 配置 + config.ini（DeepSeek/高德 API Key，勿提交）
     ├── foodmap/             # 业务应用：区 / 餐厅 / 记录 / 待尝 / AI 推荐官（纯 REST API）
@@ -28,7 +28,7 @@ clw_agent/
 
 ---
 
-## 📱 一、安卓 APP（专属美食关怀）
+## 📱 一、安卓 APP（光旅之盘）
 
 ### 送给她之前：修改专属信息（只需 1 个文件）
 
@@ -61,7 +61,7 @@ flutter build apk --release
 
 ### 温馨提示
 
-- 通知权限若被拒绝，可去手机设置 → 应用 → 专属美食关怀 → 通知 中重新开启
+- 通知权限若被拒绝，可去手机设置 → 应用 → 光旅之盘 → 通知 中重新开启
 - 部分手机（小米/华为等）有「自启动管理」，若收不到提醒，将 APP 加入允许自启动名单即可
 
 ---

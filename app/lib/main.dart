@@ -32,7 +32,7 @@ class GiftingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Compass of Love & Wanderlust',
+      title: 'Compass of Light & Wanderlust',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: showSplash ? const _Root() : const MainShell(),

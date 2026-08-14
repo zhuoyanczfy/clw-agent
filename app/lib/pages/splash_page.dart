@@ -106,7 +106,7 @@ class _SplashPageState extends State<SplashPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Compass of Love',
+                          'Compass of Light',
                           style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
@@ -188,7 +188,7 @@ class _SplashPageState extends State<SplashPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
-                        'Compass of Love',
+                        'Compass of Light',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.bold,

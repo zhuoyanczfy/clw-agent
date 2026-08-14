@@ -1,4 +1,4 @@
-# Compass of Love & Wanderlust 🎁
+# Compass of Light & Wanderlust 🎁
 
 送给她的礼物 APP（Flutter 客户端）：专属问候、认识天数、每日美食推荐、足迹地图、AI 推荐官、随机加载页。
 
