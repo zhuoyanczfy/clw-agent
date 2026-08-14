@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import random
+import re
 from pathlib import Path
 
 from django import forms
@@ -1040,15 +1041,18 @@ def _generate_reading(card_name, keyword, orientation, her_name):
         },
     ]
     text = chat(messages, temperature=0.9, timeout=60).strip()
+    # 解析【今日解读】与【幸运指引】两段；模型偶尔不守格式，用正则加兜底
     reading, lucky = '', ''
-    for part in text.split('【'):
-        part = part.strip()
-        if part.startswith('今日解读】'):
-            reading = part[len('今日解读】'):].strip()
-        elif part.startswith('幸运指引】'):
-            lucky = part[len('幸运指引】'):].strip()
+    m = re.search(r'【今日解读】\s*(.*?)(?=【幸运指引】|$)', text, re.S)
+    if m:
+        reading = m.group(1).strip()
+    m = re.search(r'【幸运指引】\s*(.*)$', text, re.S)
+    if m:
+        lucky = m.group(1).strip()
     if not reading:
         reading = text
+    if not lucky:
+        lucky = '幸运色：奶杏黄'
     return reading, lucky
 
 
