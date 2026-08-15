@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/quote.dart';
 import '../services/foodmap_api.dart';
@@ -28,6 +31,25 @@ class _QuotePageState extends State<QuotePage> {
     _load();
   }
 
+  static const _prefKeyRandomQuote = 'random_quote';
+
+  Future<void> _saveRandomQuote(Quote quote) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKeyRandomQuote, jsonEncode(quote.toJson()));
+  }
+
+  Future<Quote?> _restoreRandomQuote() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefKeyRandomQuote);
+    if (raw == null) return null;
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      return Quote.fromJson(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -37,11 +59,17 @@ class _QuotePageState extends State<QuotePage> {
       final results = await Future.wait([
         FoodmapApi.fetchTodayQuote(),
         FoodmapApi.fetchQuoteHistory(),
+        _restoreRandomQuote(),
       ]);
       if (!mounted) return;
+      final todayQuote = results[0] as Quote;
+      final history = results[1] as List<Quote>;
+      final savedRandom = results[2] as Quote?;
+      
       setState(() {
-        _today = results[0] as Quote;
-        _history = results[1] as List<Quote>;
+        // 如果有保存的随机句子，优先显示；否则显示今日句子
+        _today = savedRandom ?? todayQuote;
+        _history = history;
         _loading = false;
       });
     } catch (_) {
@@ -59,73 +87,12 @@ class _QuotePageState extends State<QuotePage> {
     try {
       final quote = await FoodmapApi.fetchRandomQuote();
       if (!mounted) return;
-      // 弹窗展示随机句子
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          contentPadding: const EdgeInsets.all(24),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('✨', style: TextStyle(fontSize: 32)),
-              const SizedBox(height: 16),
-              Text(
-                quote.text,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                  height: 1.7,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '${quote.author}《${quote.source}》',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textLight,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  quote.category,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.primaryDark,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _fetchRandom();
-              },
-              child: const Text('再来一条'),
-            ),
-          ],
-        ),
-      );
+      // 直接更新今日句子，页面自动刷新显示新内容
+      setState(() {
+        _today = quote;
+      });
+      // 保存到 SharedPreferences，刷新后也能保持
+      await _saveRandomQuote(quote);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

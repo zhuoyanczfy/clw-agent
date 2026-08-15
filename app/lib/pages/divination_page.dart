@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/divination.dart';
 import '../services/foodmap_api.dart';
@@ -10,6 +12,7 @@ import '../widgets/cute_widgets.dart';
 
 /// 每日占卜页：点击罗盘开始，指针旋转动画后展示今日塔罗解读。
 /// 结果由后端按日期缓存，当天多次占卜结果一致，零点自动刷新。
+/// 当天已占卜过再进入页面：直接展示上次结果，不再重新抽牌。
 class DivinationPage extends StatefulWidget {
   const DivinationPage({super.key});
 
@@ -19,6 +22,9 @@ class DivinationPage extends StatefulWidget {
 
 class _DivinationPageState extends State<DivinationPage>
     with TickerProviderStateMixin {
+  static const _prefsKeyDate = 'divination_last_date';
+  static const _prefsKeyJson = 'divination_last_json';
+
   // 指针旋转动画（点击后持续转，拿到结果后减速停止）
   late final AnimationController _spinCtrl = AnimationController(
     vsync: this,
@@ -36,14 +42,60 @@ class _DivinationPageState extends State<DivinationPage>
   double _spinTurns = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _restoreTodayResult();
+  }
+
+  @override
   void dispose() {
     _spinCtrl.dispose();
     _resultCtrl.dispose();
     super.dispose();
   }
 
+  /// 当天已占卜过则直接展示结果（无动画、无请求）；未占卜或跨天保持待占卜状态。
+  Future<void> _restoreTodayResult() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_prefsKeyDate) != _todayStr()) return;
+      final jsonStr = prefs.getString(_prefsKeyJson);
+      if (jsonStr == null || jsonStr.isEmpty) return;
+      final d = Divination.fromJson(
+        jsonDecode(jsonStr) as Map<String, dynamic>,
+      );
+      if (d.cardName.isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        _phase = _Phase.done;
+        _result = d;
+      });
+      _resultCtrl.value = 1.0; // 跳过入场动画直接展示
+    } catch (_) {
+      // 本地数据损坏则忽略，回到未占卜状态
+    }
+  }
+
+  /// 占卜成功后落本地，当天再次进入页面直接展示结果
+  Future<void> _saveTodayResult(Divination d) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKeyDate, d.date);
+      await prefs.setString(_prefsKeyJson, jsonEncode(d.toJson()));
+    } catch (_) {
+      // 本地存储失败不影响本次展示
+    }
+  }
+
+  static String _todayStr() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _startDivination() async {
-    if (_phase == _Phase.spinning) return;
+    // 已占卜过则不再重新占卜（结果当天恒定，罗盘点击已被禁用，双保险）
+    if (_phase != _Phase.idle) return;
     setState(() {
       _phase = _Phase.spinning;
       _error = null;
@@ -66,6 +118,8 @@ class _DivinationPageState extends State<DivinationPage>
       error = '占卜师没能连线成功，稍后再试试';
     }
     if (!mounted) return;
+
+    if (result != null) _saveTodayResult(result);
 
     // 停针：补到最近的整圈，带一点回弹
     setState(() {
@@ -120,7 +174,7 @@ class _DivinationPageState extends State<DivinationPage>
   Widget _buildCompass() {
     final spinning = _phase == _Phase.spinning;
     return SquishyTap(
-      onTap: spinning ? null : _startDivination,
+      onTap: spinning || _phase == _Phase.done ? null : _startDivination,
       borderRadius: BorderRadius.circular(160),
       child: SizedBox(
         width: 300,

@@ -96,25 +96,60 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     _scrollToBottom();
   }
 
+  /// 拆分 AI 回复：剥离 ```json 代码块 → (纯文本, 餐馆卡片列表)
+  (String, List<Map<String, dynamic>>) _parseReply(String content) {
+    final cards = <Map<String, dynamic>>[];
+    var text = content;
+    final jsonBlock = RegExp(r'```json\s*([\s\S]*?)```');
+    for (final m in jsonBlock.allMatches(content)) {
+      text = text.replaceAll(m.group(0)!, '');
+      cards.addAll(_tryParseCards(m.group(1)!));
+    }
+    // 清理 markdown 符号（AI 文案常带 **粗体** 与 --- 分隔线）
+    text = text.replaceAll('**', '');
+    text = text.replaceAll(RegExp(r'^---+\s*$', multiLine: true), '');
+    // 兜底：剥离偶发的 XML 工具调用标记（后端异常时可能混入回复）
+    text = text.replaceAll(RegExp(r'<tool_calls>[\s\S]*?</tool_calls>'), '');
+    return (text.trim(), cards);
+  }
+
+  /// 宽容解析 JSON 卡片数组：截断尾随文本、去尾逗号，避免 AI 格式偏差导致卡片丢失
+  List<Map<String, dynamic>> _tryParseCards(String raw) {
+    var s = raw.trim();
+    final lastBracket = s.lastIndexOf(']');
+    if (lastBracket >= 0 && lastBracket < s.length - 1) {
+      s = s.substring(0, lastBracket + 1);
+    }
+    s = s.replaceAll(RegExp(r',\s*]'), ']');
+    try {
+      final decoded = jsonDecode(s);
+      if (decoded is List) {
+        final found = <Map<String, dynamic>>[];
+        for (final item in decoded) {
+          if (item is Map && item['name'] is String) {
+            found.add(_normalizeCard(item));
+          }
+        }
+        return found;
+      }
+    } catch (_) {
+      // 非法 JSON，交给调用方回退正则提取
+    }
+    return const [];
+  }
+
+  /// 流式生成中的显示文本：不展示原始 ```json 代码块，避免用户看到半截 JSON
+  String _streamingDisplay(String s) {
+    final idx = s.indexOf('```');
+    if (idx < 0) return s;
+    final head = s.substring(0, idx).trimRight();
+    return head.isEmpty ? '（正在生成推荐卡片…）' : '$head\n（正在生成推荐卡片…）';
+  }
+
   /// 从 AI 回复中提取推荐餐厅：优先解析 ```json 卡片（含照片/评分/标签等），
   /// 解析失败时回退正则「店名（区）」提取，供图文卡展示与一键收藏
   void _extractRecommendations(String reply) {
-    final found = <Map<String, dynamic>>[];
-    final jsonBlock = RegExp(r'```json\s*([\s\S]*?)```');
-    for (final m in jsonBlock.allMatches(reply)) {
-      try {
-        final decoded = jsonDecode(m.group(1)!.trim());
-        if (decoded is List) {
-          for (final item in decoded) {
-            if (item is Map && item['name'] is String) {
-              found.add(_normalizeCard(item));
-            }
-          }
-        }
-      } catch (_) {
-        // 代码块非法 JSON，继续尝试下一个/回退正则
-      }
-    }
+    final found = _parseReply(reply).$2;
     if (found.isEmpty) {
       final regex = RegExp(
         r'[「【】"]?\s*([\u4e00-\u9fa5A-Za-z0-9·&（）()]{2,20}?)\s*[」】"]?\s*(?:（|\(|【)([\u4e00-\u9fa5]{2,4}区)(?:）|\)|】)',
@@ -238,10 +273,27 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                       if (index == _messages.length) {
                         // 生成中：还没吐字时显示「正在输入」，否则显示流式气泡
                         return _streaming.isNotEmpty
-                            ? _bubble('assistant', _streaming, streaming: true)
+                            ? _bubble(
+                                'assistant',
+                                _streamingDisplay(_streaming),
+                                streaming: true,
+                              )
                             : _typingBubble();
                       }
                       final m = _messages[index];
+                      if (m.role == 'assistant') {
+                        // AI 回复：纯文本气泡 + 内嵌餐馆信息卡（特色菜/评分/地址/收藏）
+                        final split = _parseReply(m.content);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (split.$1.isNotEmpty)
+                              _bubble('assistant', split.$1),
+                            for (final c in split.$2)
+                              _inlineRestaurantCard(c),
+                          ],
+                        );
+                      }
                       return _bubble(m.role, m.content);
                     },
                   ),
@@ -296,6 +348,203 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 气泡内嵌的餐馆信息卡：门店图 + 店名 + 评分/人均 + 推荐理由 + 特色菜标签 + 地址 + 收藏
+  Widget _inlineRestaurantCard(Map<String, dynamic> item) {
+    final image = (item['image'] ?? '').toString();
+    final rating = item['rating'] as double?;
+    final perCapita = item['per_capita'] as double?;
+    final tags = (item['tags'] as List?)?.cast<String>() ?? const <String>[];
+    final address = (item['address'] ?? '').toString();
+    final reason = (item['reason'] ?? '').toString();
+    final district = (item['district'] ?? '').toString();
+    return BouncyIn(
+      offsetY: 12,
+      duration: const Duration(milliseconds: 350),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.82,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF2DCE6), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 头部：门店图 + 店名 + 评分/人均/区
+            Row(
+              children: [
+                if (image.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: CachedNetworkImage(
+                        imageUrl: image,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, _, _) => _imagePlaceholder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item['name']}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (rating != null) ...[
+                            const Icon(
+                              Icons.star,
+                              size: 13,
+                              color: Color(0xFFFF9F45),
+                            ),
+                            Text(
+                              ' $rating',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFE8823A),
+                              ),
+                            ),
+                          ],
+                          if (rating != null && perCapita != null)
+                            const SizedBox(width: 8),
+                          if (perCapita != null)
+                            Text(
+                              '人均¥${perCapita.round()}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textLight,
+                              ),
+                            ),
+                          if (district.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              district,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textLight,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            // 推荐理由
+            if (reason.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                reason,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppTheme.textDark,
+                  height: 1.6,
+                ),
+              ),
+            ],
+            // 特色菜标签
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [for (final t in tags) _tagChip(t)],
+              ),
+            ],
+            // 地址
+            if (address.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 14,
+                    color: Color(0xFFB08FB8),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      address,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textLight,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 2),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _collect(item),
+                icon: const Icon(Icons.star_outline, size: 16),
+                label: const Text('收藏到待尝'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 特色菜标签小徽章
+  Widget _tagChip(String tag) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFFE0B2)),
+      ),
+      child: Text(
+        tag,
+        style: const TextStyle(
+          fontSize: 11,
+          color: Color(0xFFE8823A),
+        ),
       ),
     );
   }

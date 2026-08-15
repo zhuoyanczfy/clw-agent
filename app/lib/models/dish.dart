@@ -39,7 +39,14 @@ class Dish {
   /// 是否有完整菜谱（材料用量 + 制作步骤）
   bool get hasDetail => ingredients.isNotEmpty && steps.isNotEmpty;
 
+  /// 兼容两种后端格式：JSON 数组（如 ["牛腩 500 克"]）或按行文本
   static List<String> _splitLines(dynamic value) {
+    if (value is List) {
+      return value
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
     if (value is! String || value.trim().isEmpty) return const [];
     return value
         .split('\n')

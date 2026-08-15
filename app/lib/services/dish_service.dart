@@ -13,11 +13,50 @@ import 'api_config.dart';
 /// 内置库的取模算法与后端保持一致（md5(date) 前 8 位十六进制取整再取模），
 /// 保证无论是否部署后端，同一天的推荐都是同一道菜。
 class DishService {
-  /// 获取今日推荐
+  /// 图片相对路径（/media/...）转完整 URL，已是 http 开头则原样返回
+  static Future<Dish> _withFullImageUrl(Dish dish) async {
+    final url = dish.imageUrl;
+    if (url.isEmpty || url.startsWith('http')) return dish;
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isEmpty) return dish;
+    return Dish(
+      id: dish.id,
+      name: dish.name,
+      category: dish.category,
+      description: dish.description,
+      recipe: dish.recipe,
+      ingredients: dish.ingredients,
+      steps: dish.steps,
+      imageUrl: '$base$url',
+    );
+  }
+
+  /// 获取今日推荐（优先每日菜单接口：菜谱池随机+DB按日期缓存，
+  /// 失败回退旧菜库接口，再不行用内置库）
   static Future<Dish> getTodayDish() async {
     final dateStr = _dateString(DateTime.now());
     final base = await ApiConfig.getBaseUrl();
     if (base.isNotEmpty) {
+      // 新接口：每日菜单（每日随机拉取一道，DB 缓存当天）
+      try {
+        final resp = await http
+            .get(
+              Uri.parse('$base/api/meal/today/'),
+              headers: {'X-Api-Token': AppConfig.apiToken},
+            )
+            .timeout(const Duration(seconds: 5));
+        if (resp.statusCode == 200) {
+          final json = jsonDecode(utf8.decode(resp.bodyBytes));
+          final mealJson = json['meal'] as Map<String, dynamic>?;
+          if (mealJson != null &&
+              (mealJson['name'] ?? '').toString().isNotEmpty) {
+            return _withFullImageUrl(Dish.fromJson(mealJson));
+          }
+        }
+      } catch (_) {
+        // 网络失败，回退旧接口
+      }
+      // 旧接口：菜库按日期取模
       try {
         final resp = await http
             .get(
@@ -29,14 +68,67 @@ class DishService {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));
           final dishJson = json['dish'] as Map<String, dynamic>;
           if (dishJson['name'] != null && (dishJson['name'] as String).isNotEmpty) {
-            return Dish.fromJson(dishJson);
+            return _withFullImageUrl(Dish.fromJson(dishJson));
           }
         }
       } catch (_) {
         // 网络失败，走内置库兜底
       }
     }
-    return _fromBuiltin(dateStr);
+    return _withFullImageUrl(_fromBuiltin(dateStr));
+  }
+
+  /// 历史每日菜单（云端接口，无网络返回空列表）
+  static Future<List<MealRecord>> fetchMealHistory() async {
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isEmpty) return [];
+    try {
+      final resp = await http
+          .get(
+            Uri.parse('$base/api/meal/history/'),
+            headers: {'X-Api-Token': AppConfig.apiToken},
+          )
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(utf8.decode(resp.bodyBytes));
+        final list = json['meals'] as List<dynamic>? ?? [];
+        return Future.wait(list.map((e) async {
+          final m = e as Map<String, dynamic>;
+          return MealRecord(
+            date: (m['date'] ?? '').toString(),
+            dish: await _withFullImageUrl(Dish.fromJson(m)),
+          );
+        }));
+      }
+    } catch (_) {
+      // 网络失败返回空
+    }
+    return [];
+  }
+
+  /// 随机菜单（不落库、不影响今日菜单；失败返回 null）
+  static Future<Dish?> fetchRandomMeal() async {
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isEmpty) return null;
+    try {
+      final resp = await http
+          .get(
+            Uri.parse('$base/api/meal/random/'),
+            headers: {'X-Api-Token': AppConfig.apiToken},
+          )
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(utf8.decode(resp.bodyBytes));
+        final mealJson = json['meal'] as Map<String, dynamic>?;
+        if (mealJson != null &&
+            (mealJson['name'] ?? '').toString().isNotEmpty) {
+          return _withFullImageUrl(Dish.fromJson(mealJson));
+        }
+      }
+    } catch (_) {
+      // 失败返回 null
+    }
+    return null;
   }
 
   /// 获取全部菜库（云端优先，失败或未配置时回退内置库）
@@ -53,16 +145,16 @@ class DishService {
         if (resp.statusCode == 200) {
           final json = jsonDecode(utf8.decode(resp.bodyBytes));
           final list = json['dishes'] as List<dynamic>;
-          final dishes = list
+          final dishes = await Future.wait(list
               .map((e) => Dish.fromJson(e as Map<String, dynamic>))
-              .toList();
+              .map(_withFullImageUrl));
           if (dishes.isNotEmpty) return dishes;
         }
       } catch (_) {
         // 网络失败，走内置库兜底
       }
     }
-    return builtinDishes;
+    return Future.wait(builtinDishes.map(_withFullImageUrl));
   }
 
   /// 按日期从内置库取（与后端 dish_for_date 算法一致）
@@ -172,4 +264,12 @@ class DishService {
       '${t.year.toString().padLeft(4, '0')}-'
       '${t.month.toString().padLeft(2, '0')}-'
       '${t.day.toString().padLeft(2, '0')}';
+}
+
+/// 每日菜单历史记录（日期 + 当日菜品）
+class MealRecord {
+  final String date;
+  final Dish dish;
+
+  const MealRecord({required this.date, required this.dish});
 }

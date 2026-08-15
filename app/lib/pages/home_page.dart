@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
 import 'divination_page.dart';
+import 'meal_history_page.dart';
 import 'pet_page.dart';
 import 'quote_page.dart';
 import 'reminder_settings_page.dart';
@@ -277,10 +278,31 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const Spacer(),
+            // 换一道：随机抽一道展示（不影响今日菜单）
+            TextButton(
+              onPressed: _randomMeal,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                '🎲 换一道',
+                style: TextStyle(fontSize: 13, color: AppTheme.primaryDark),
+              ),
+            ),
+            GestureDetector(
+              onTap: _openMealHistory,
+              child: const Text(
+                '历史 ›',
+                style: TextStyle(fontSize: 13, color: AppTheme.primaryDark),
+              ),
+            ),
+            const SizedBox(width: 10),
             GestureDetector(
               onTap: dish == null ? null : () => _openDish(dish),
               child: const Text(
-                '查看详情 ›',
+                '详情 ›',
                 style: TextStyle(fontSize: 13, color: AppTheme.primaryDark),
               ),
             ),
@@ -392,6 +414,25 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => DishPage(dish: dish)));
+  }
+
+  /// 换一道：随机抽一道更新卡片（不改变今日菜单缓存）
+  Future<void> _randomMeal() async {
+    final dish = await DishService.fetchRandomMeal();
+    if (!mounted) return;
+    if (dish != null) {
+      setState(() => _todayDish = dish);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('随机菜单拉取失败，请稍后再试')),
+      );
+    }
+  }
+
+  void _openMealHistory() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const MealHistoryPage()));
   }
 
   void _openPet() {

@@ -30,4 +30,14 @@ class Quote {
       imageUrl: q['image_url']?.toString() ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'date': date,
+        'text': text,
+        'author': author,
+        'source': source,
+        'category': category,
+        'image_url': imageUrl,
+      };
 }

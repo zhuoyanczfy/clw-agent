@@ -119,5 +119,5 @@ python manage.py runserver 0.0.0.0:8000
 
 ## 日常更新美食内容
 
-- 改后端菜库：编辑 `backend/foodmap/dishes_data.py` 添加新菜，重启服务即可，APP 无需重装
-- 改 APP 内置库：编辑 `backend/foodmap/dishes_data.py` 后手动同步到 `app/lib/data/dishes.dart`，再重新打包
+- 改后端菜库：编辑 `backend/foodmap/dishes_full.py` 后执行 `python manage.py seed_dishes`，重启服务即可，APP 无需重装
+- 改 APP 内置库：编辑 `backend/foodmap/dishes_full.py` 后执行 `py -3.10 tmp/gen_dishes_dart.py` 重新生成 `app/lib/data/dishes.dart`，再重新打包

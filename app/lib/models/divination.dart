@@ -33,4 +33,17 @@ class Divination {
 
   /// 逆位时结果卡片整体倒转展示
   bool get isReversed => orientation == '逆位';
+
+  /// 序列化（本地缓存当天结果，与 fromJson 互逆）
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        'divination': {
+          'card_name': cardName,
+          'orientation': orientation,
+          'keyword': keyword,
+          'reading': reading,
+          'lucky': lucky,
+        },
+        'cached': cached,
+      };
 }
