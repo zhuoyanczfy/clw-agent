@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from django import forms
+from django.db import IntegrityError
 from django.db.models import Count
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -19,6 +20,7 @@ from django.views.decorators.http import require_http_methods
 from .auth import require_api_token
 from .models import (
     AppConfig,
+    DailyMeal,
     DiningRecord,
     DiningRecordPhoto,
     Dish,
@@ -822,25 +824,61 @@ def api_chat(request):
     system_msg = {'role': 'system', 'content': build_system_prompt(profile=build_taste_profile(), task=message)}
     messages_payload = [system_msg] + history
 
+    def _merge_tool_calls(parts):
+        """合并流式 tool_calls 增量（按 index 组装），返回完整 tool_calls 列表。"""
+        calls = {}
+        for part in parts:
+            for tc in part or []:
+                idx = tc.get('index', 0)
+                c = calls.setdefault(idx, {
+                    'id': '',
+                    'type': 'function',
+                    'function': {'name': '', 'arguments': ''},
+                })
+                if tc.get('id'):
+                    c['id'] = tc['id']
+                fn = tc.get('function') or {}
+                if fn.get('name'):
+                    c['function']['name'] = fn['name']
+                if fn.get('arguments'):
+                    c['function']['arguments'] += fn['arguments']
+        return list(calls.values())
+
     def sse_generator():
-        full_reply = ''
         try:
-            tool_round = chat_tool_round(messages_payload, TOOLS_SCHEMA)
+            messages = messages_payload
+            # 第 1 轮（非流式带 tools）：决定是否调用工具
+            tool_round = chat_tool_round(messages, TOOLS_SCHEMA)
             tool_calls = tool_round.get('tool_calls') or []
-            if tool_calls:
-                assistant_msg = {
-                    'role': 'assistant',
-                    'content': tool_round.get('content') or '',
-                    'tool_calls': tool_calls,
-                }
-                tool_results = execute_tool_calls(tool_calls)
-                final_messages = messages_payload + [assistant_msg] + tool_results
-                for delta in chat_stream(final_messages):
-                    full_reply += delta
-                    yield f'data: {json.dumps({"delta": delta}, ensure_ascii=False)}\n\n'
-            else:
-                full_reply = tool_round.get('content') or ''
-                yield f'data: {json.dumps({"delta": full_reply}, ensure_ascii=False)}\n\n'
+            if not tool_calls:
+                # 无工具调用（寒暄/追问/直接回答）：一次性下发
+                content = tool_round.get('content') or ''
+                yield f'data: {json.dumps({"delta": content}, ensure_ascii=False)}\n\n'
+                yield 'data: [DONE]\n\n'
+                return
+
+            # 后续轮流式（带 tools）：边输出边检测是否再次调用工具，最多再 2 轮
+            for _ in range(2):
+                messages = messages + [
+                    {
+                        'role': 'assistant',
+                        'content': tool_round.get('content') or '',
+                        'tool_calls': tool_calls,
+                    },
+                ] + execute_tool_calls(tool_calls)
+                tc_parts = []
+                for content, tcs in chat_stream(messages, tools=TOOLS_SCHEMA):
+                    if tcs:
+                        tc_parts.append(tcs)
+                        continue  # 工具调用增量：不发给客户端
+                    if content:
+                        yield f'data: {json.dumps({"delta": content}, ensure_ascii=False)}\n\n'
+                if not tc_parts:
+                    break  # 本轮无工具调用，正常结束
+                tool_calls = _merge_tool_calls(tc_parts)
+                tool_round = {'role': 'assistant', 'content': '', 'tool_calls': tool_calls}
+                if not tool_calls:
+                    break
             yield 'data: [DONE]\n\n'
         except LLMError as exc:
             yield f'data: {json.dumps({"error": str(exc)}, ensure_ascii=False)}\n\n'
@@ -1133,10 +1171,20 @@ def _quote_json(q):
 
 @require_api_token
 def api_quote_today(request):
-    """今日好句：按日期缓存，当天首次请求从 hitokoto.cn 拉取并取 Unsplash 配图，之后直接返回。"""
+    """今日好句：按日期缓存，当天首次请求从 hitokoto.cn 拉取并取 Pixabay 配图。
+    配图失败导致 image_url 为空时，后续请求会重试补图（自愈）。"""
     today = datetime.date.today().isoformat()
     cached = Quote.objects.filter(date=today).first()
+    if cached and cached.image_url:
+        return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
+
     if cached:
+        # 已有句子但缺配图：用落库的关键词重试补图，成功则更新返回，失败仍返回原缓存
+        from .services.cover_image import fetch_cover_url
+        image_url = fetch_cover_url(cached.image_keyword)
+        if image_url:
+            cached.image_url = image_url
+            cached.save(update_fields=['image_url'])
         return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
 
     # 从 hitokoto.cn 拉取
@@ -1145,8 +1193,8 @@ def api_quote_today(request):
     if not item:
         return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
 
-    # Unsplash 配图：一次性取好落库，避免历史列表重复请求（免费额度 50 次/小时）
-    from .services.unsplash import fetch_cover_url
+    # Pixabay 配图：一次性取好落库，避免历史列表重复请求（免费额度 100 次/小时）
+    from .services.cover_image import fetch_cover_url
     image_url = fetch_cover_url(item['image_keyword'])
 
     obj, _ = Quote.objects.update_or_create(
@@ -1177,13 +1225,18 @@ def api_quote_history(request):
 
 @require_api_token
 def api_quote_random(request):
-    """再来一条：实时从 hitokoto.cn 拉取，不缓存、不计数、不限制。"""
+    """再来一条：实时从 hitokoto.cn 拉取，不缓存、不计数、不限制。
+    每次请求新随机句子，需配新图（必要调用）；配图失败时回退到最近一张历史配图，
+    再不行用默认意境图，保证前端不出现占位图。"""
     from .data.quotes import fetch_hitokoto
     item = fetch_hitokoto()
     if not item:
         return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
-    from .services.unsplash import fetch_cover_url
+    from .services.cover_image import DEFAULT_IMAGE_URL, fetch_cover_url
     image_url = fetch_cover_url(item['image_keyword'])
+    if not image_url:
+        fallback = Quote.objects.exclude(image_url='').order_by('-date').values_list('image_url', flat=True).first()
+        image_url = fallback or DEFAULT_IMAGE_URL
     return JsonResponse({
         'text': item['text'],
         'author': item['author'],
@@ -1191,3 +1244,104 @@ def api_quote_random(request):
         'category': item['category'],
         'image_url': image_url,
     })
+
+
+# ============ 每日菜单（HowToCook 开源菜谱池） ============
+
+
+def _meal_json(m):
+    """每日菜单序列化（与 APP Dish.fromJson 字段对应），支持池子 dict 与 DailyMeal 模型。
+
+    材料/步骤统一输出 JSON 数组；旧式按行文本也兼容。
+    """
+    def to_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        text = str(value).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return parsed
+        except ValueError:
+            pass
+        return [l.strip() for l in text.splitlines() if l.strip()]
+
+    if isinstance(m, DailyMeal):
+        return {
+            'id': m.name,
+            'name': m.name,
+            'category': m.category,
+            'description': m.description,
+            'ingredients': to_list(m.ingredients),
+            'steps': to_list(m.steps),
+            'image_url': m.image_url,
+        }
+    return {
+        'id': m.get('name', ''),
+        'name': m.get('name', ''),
+        'category': m.get('category', ''),
+        'description': m.get('description', ''),
+        'ingredients': to_list(m.get('ingredients', [])),
+        'steps': to_list(m.get('steps', [])),
+        'image_url': m.get('image', ''),
+    }
+
+
+@require_api_token
+def api_meal_today(request):
+    """今日菜单：按日期缓存。当天首次访问从菜谱池随机抽一道落库，之后返回同一道。"""
+    from .services import meal_pool
+    today = datetime.date.today()
+    meal = DailyMeal.objects.filter(date=today).first()
+    if meal:
+        return JsonResponse({'date': today.isoformat(), 'cached': True, 'meal': _meal_json(meal)})
+
+    item = meal_pool.random_meal()
+    if not item:
+        return JsonResponse({'error': '菜谱池为空，请稍后再试'}, status=503)
+    try:
+        meal = DailyMeal.objects.create(
+            date=today,
+            name=item['name'],
+            category=item.get('category', ''),
+            description=item.get('description', ''),
+            ingredients=json.dumps(item.get('ingredients', []), ensure_ascii=False),
+            steps=json.dumps(item.get('steps', []), ensure_ascii=False),
+            image_url=item.get('image', ''),
+        )
+    except IntegrityError:
+        # 并发下已被其他请求创建，读取已存在的
+        meal = DailyMeal.objects.get(date=today)
+    return JsonResponse({'date': today.isoformat(), 'cached': False, 'meal': _meal_json(meal)})
+
+
+@require_api_token
+def api_meal_history(request):
+    """历史每日菜单：按日期倒序，最多 30 条。"""
+    meals = []
+    for m in DailyMeal.objects.all().order_by('-date')[:30]:
+        item = _meal_json(m)
+        item['date'] = m.date.isoformat()
+        meals.append(item)
+    return JsonResponse({'total': len(meals), 'meals': meals})
+
+
+@require_api_token
+def api_meal_random(request):
+    """随机菜单：从菜谱池随机抽一道，不落库、不影响今日菜单；尽量避开今日已选。"""
+    from .services import meal_pool
+    today_meal = DailyMeal.objects.filter(date=datetime.date.today()).first()
+    today_name = today_meal.name if today_meal else None
+    item = None
+    for _ in range(5):
+        candidate = meal_pool.random_meal()
+        if not candidate:
+            return JsonResponse({'error': '菜谱池为空，请稍后再试'}, status=503)
+        item = candidate
+        if meal_pool.pool_size() <= 1 or candidate['name'] != today_name:
+            break
+    return JsonResponse({'meal': _meal_json(item)})

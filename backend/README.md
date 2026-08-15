@@ -27,7 +27,7 @@
 - DeepSeek Chat API（OpenAI 兼容，流式 SSE 输出），配置见 `config/config.ini`（`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`）
 - 轻量 Agent 层：MD 定义 Agent（`foodmap/agents/recommender/agent.md`）+ 工具注册表（`foodmap/services/tools/`）+ OpenAI 兼容 function calling，不引入 CrewAI
 - 高德地图 Web 服务 API（POI 搜索，个人免费 Key），配置见 `config/config.ini`（`MAP_KEY`）
-- hitokoto.cn「一言」API（MIT 开源句子库）+ Unsplash 官方 API（免费 50 请求/小时，Access Key 配置 `UNSPLASH_ACCESS_KEY`，留空则好句无配图）
+- hitokoto.cn「一言」API（MIT 开源句子库）+ Pixabay 官方 API（免费 100 请求/小时，支持中文关键词，API Key 配置 `PIXABAY_API_KEY`，留空则好句无配图）
 
 ## 快速开始
 
@@ -82,7 +82,7 @@ python manage.py runserver 0.0.0.0:8000
 │   ├── dishes_data.py       # 40 道美食库（每日推荐数据源，与 APP 内置一致）
 │   ├── data/quotes.py       # hitokoto.cn 客户端（分类/长度过滤 → 中文分类名 + 配图关键词）
 │   ├── agents/recommender/agent.md   # 推荐官定义（frontmatter + Goal/Backstory/Task Template/Expected Output）
-│   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）+ unsplash.py（好句配图）
+│   ├── services/            # llm.py（DeepSeek 客户端）+ profile.py（口味画像）+ cover_image.py（好句配图）
 │   │   ├── agent.py         # agent.md 解析（mtime 缓存）+ system prompt 构建 + 工具轮编排
 │   │   └── tools/           # 工具注册表 registry.py + search_restaurants 实现
 │   ├── geodata/             # 南京区划 GeoJSON
@@ -121,7 +121,7 @@ python manage.py runserver 0.0.0.0:8000
 2. 数据库迁移：本地 `dumpdata` 导出 → 服务器 `migrate` + `loaddata` 导入，`media/` 目录整体同步
 3. 高德 `MAP_KEY` 需在控制台把服务器公网 IP 加入白名单
 4. 加载页上传接口需在 `config/config.ini` 配置 `UPLOAD_TOKEN`（请求头 `X-Upload-Token`，留空则禁用 API 上传，仍可用 Admin 管理）
-5. 好句配图需配置 `UNSPLASH_ACCESS_KEY`（Unsplash 官方 API，免费 50 次/小时；留空则好句无配图）
+5. 好句配图需配置 `PIXABAY_API_KEY`（Pixabay 官方 API，免费 100 次/小时，支持中文关键词；留空则好句无配图）
 
 ## 后续可做
 

@@ -269,6 +269,31 @@ class Quote(models.Model):
         return f'{self.date} {self.author}《{self.source}》'
 
 
+class DailyMeal(models.Model):
+    """每日菜单：按日期从菜谱池（HowToCook 开源菜谱）随机选一道并缓存。
+
+    当天首次访问时生成并落库，之后同一天返回同一道菜；
+    ingredients / steps 以 JSON 数组字符串存储，APP 端按数组渲染。
+    """
+
+    date = models.DateField('日期', unique=True)
+    name = models.CharField('菜名', max_length=50)
+    category = models.CharField('分类', max_length=20, blank=True)
+    description = models.TextField('简介', blank=True)
+    ingredients = models.TextField('材料', blank=True, help_text='JSON 数组字符串')
+    steps = models.TextField('步骤', blank=True, help_text='JSON 数组字符串')
+    image_url = models.CharField('成品图', max_length=300, blank=True, help_text='相对路径 /media/meals/...')
+    created_at = models.DateTimeField('生成时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '每日菜单'
+        verbose_name_plural = '每日菜单'
+        ordering = ['-date']
+
+    def __str__(self):
+        return f'{self.date} {self.name}'
+
+
 class DiningRecord(models.Model):
     """一次用餐记录：时间、评分、点评正文与回忆。"""
 

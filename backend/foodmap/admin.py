@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AppConfig,
+    DailyMeal,
     DiningRecord,
     Dish,
     District,
@@ -136,3 +137,12 @@ class QuoteAdmin(admin.ModelAdmin):
     @admin.display(description='金句预览')
     def text_preview(self, obj):
         return obj.text[:50] + '…' if len(obj.text) > 50 else obj.text
+
+
+@admin.register(DailyMeal)
+class DailyMealAdmin(admin.ModelAdmin):
+    """每日菜单缓存：当天首次访问自动生成，删除后下次访问重新抽一道。"""
+
+    list_display = ('date', 'name', 'category', 'created_at')
+    search_fields = ('name', 'description')
+    date_hierarchy = 'date'

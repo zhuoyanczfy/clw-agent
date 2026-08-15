@@ -50,4 +50,8 @@ urlpatterns = [
     path('api/quotes/today/', views.api_quote_today, name='quote_today'),
     path('api/quotes/history/', views.api_quote_history, name='quote_history'),
     path('api/quotes/random/', views.api_quote_random, name='quote_random'),
+    # 每日菜单（HowToCook 菜谱池）
+    path('api/meal/today/', views.api_meal_today, name='meal_today'),
+    path('api/meal/history/', views.api_meal_history, name='meal_history'),
+    path('api/meal/random/', views.api_meal_random, name='meal_random'),
 ]

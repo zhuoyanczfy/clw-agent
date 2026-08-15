@@ -108,14 +108,21 @@ def chat_tool_round(messages, tools, temperature=0.8, timeout=60):
         raise LLMError(f'DeepSeek API 响应格式异常: {exc}') from exc
 
 
-def chat_stream(messages, temperature=0.8, timeout=120):
-    """流式调用，返回内容增量迭代器（str 序列），由调用方逐步下发。"""
+def chat_stream(messages, tools=None, temperature=0.8, timeout=120):
+    """流式调用，yield (content_delta, tool_calls_delta) 二元组。
+
+    content_delta 为文本增量（可能为空字符串）；tool_calls_delta 为原始工具调用增量
+    （None 表示本轮 chunk 无工具调用）。模型在流中发出工具调用时，两者可能交错出现，
+    调用方需按 index 合并 tool_calls 增量。
+    """
     payload = {
         'model': api_model(),
         'messages': messages,
         'temperature': temperature,
         'stream': True,
     }
+    if tools:
+        payload['tools'] = tools
     try:
         resp = requests.post(
             f'{api_base_url()}/chat/completions',
@@ -133,11 +140,13 @@ def chat_stream(messages, temperature=0.8, timeout=120):
                 break
             import json
             try:
-                delta = json.loads(data)['choices'][0]['delta'].get('content')
+                delta = json.loads(data)['choices'][0].get('delta') or {}
             except (KeyError, IndexError, ValueError):
                 continue
-            if delta:
-                yield delta
+            content = delta.get('content')
+            tcs = delta.get('tool_calls')
+            if content or tcs:
+                yield content or '', tcs
     except LLMError:
         raise
     except requests.RequestException as exc:
