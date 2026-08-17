@@ -40,6 +40,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 定时提醒到点触发的接收器（flutter_local_notifications 要求手动声明） -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
         <!-- 开机后恢复定时提醒 -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
