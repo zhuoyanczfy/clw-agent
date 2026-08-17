@@ -7,13 +7,16 @@
 3. 塔罗抽牌确定性 + DeepSeek 解读解析兜底（_parse_reading）
 """
 import hashlib
+import json
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 from django.test import TestCase
 
+from foodmap.auth import _load_api_token
 from foodmap.dishes_full import DISHES_FULL
-from foodmap.models import Dish
+from foodmap.models import ChatSession, DailyMeal, Dish, FavoriteDish
 from foodmap.services.amap import gcj02_to_wgs84, wgs84_to_gcj02
 from foodmap.views import _draw_three_cards, _parse_reading, dish_for_date
 
@@ -144,3 +147,167 @@ class ReadingParseTests(TestCase):
         reading, lucky = _parse_reading(text, self._cards())
         self.assertEqual(reading, '第一段。')
         self.assertEqual(lucky, '第二段。')
+
+
+class FavoriteSnapshotTests(TestCase):
+    """收藏快照：每日菜单（菜库外）的菜也能收藏并完整展示，中文菜名可删除。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.token = _load_api_token()
+        cls.headers = {'HTTP_X_API_TOKEN': cls.token}
+        Dish.objects.create(
+            slug='tomato-beef',
+            name='番茄牛腩',
+            category='热菜',
+            description='暖心暖胃',
+            ingredients='牛腩 500 克',
+            steps='焯水后炖煮',
+            image_url='/media/dishes/tomato-beef.jpg',
+            sort=0,
+            enabled=True,
+        )
+        DailyMeal.objects.create(
+            date='2026-08-17',
+            name='逼真豆沙毛毛虫',
+            category='主食',
+            description='以假乱真的可爱造型',
+            ingredients=json.dumps(['面粉 300 克', '豆沙 200 克'], ensure_ascii=False),
+            steps=json.dumps(['和面发酵', '包馅整形'], ensure_ascii=False),
+            image_url='/media/meals/2026-08-17.jpg',
+        )
+
+    def test_meal_favorite_slug_only_backfilled_from_meal(self):
+        # 只传 slug（菜名）：后端从每日菜单补全内容
+        resp = self.client.post(
+            '/api/favorites/',
+            data=json.dumps({'slug': '逼真豆沙毛毛虫'}, ensure_ascii=False),
+            content_type='application/json',
+            **self.headers,
+        )
+        self.assertEqual(resp.status_code, 200)
+        fav = FavoriteDish.objects.get(slug='逼真豆沙毛毛虫')
+        self.assertIsNone(fav.dish_id)
+        self.assertEqual(fav.name, '逼真豆沙毛毛虫')
+
+        listing = self.client.get('/api/favorites/', **self.headers).json()
+        self.assertEqual(len(listing['favorites']), 1)
+        item = listing['favorites'][0]
+        self.assertEqual(item['id'], '逼真豆沙毛毛虫')
+        self.assertEqual(item['ingredients'], ['面粉 300 克', '豆沙 200 克'])
+        self.assertEqual(item['steps'], ['和面发酵', '包馅整形'])
+        self.assertEqual(item['image_url'], '/media/meals/2026-08-17.jpg')
+
+    def test_snapshot_from_request_body(self):
+        # 菜库与每日菜单都没有的菜：用请求体完整内容建快照
+        resp = self.client.post(
+            '/api/favorites/',
+            data=json.dumps({
+                'slug': '创意小炒',
+                'name': '创意小炒',
+                'category': '创意菜',
+                'description': '临时创意',
+                'ingredients': ['时蔬 200 克'],
+                'steps': ['快炒'],
+                'image_url': '',
+            }, ensure_ascii=False),
+            content_type='application/json',
+            **self.headers,
+        )
+        self.assertEqual(resp.status_code, 200)
+        listing = self.client.get('/api/favorites/', **self.headers).json()
+        item = next(
+            f for f in listing['favorites'] if f['id'] == '创意小炒'
+        )
+        self.assertEqual(item['name'], '创意小炒')
+        self.assertEqual(item['ingredients'], ['时蔬 200 克'])
+
+    def test_dish_favorite_links_and_delete_by_slug(self):
+        resp = self.client.post(
+            '/api/favorites/',
+            data=json.dumps({'slug': 'tomato-beef'}),
+            content_type='application/json',
+            **self.headers,
+        )
+        self.assertEqual(resp.status_code, 200)
+        fav = FavoriteDish.objects.get(slug='tomato-beef')
+        self.assertEqual(fav.dish.slug, 'tomato-beef')
+
+        resp = self.client.delete('/api/favorites/tomato-beef/', **self.headers)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(FavoriteDish.objects.filter(slug='tomato-beef').exists())
+
+    def test_chinese_name_delete(self):
+        self.client.post(
+            '/api/favorites/',
+            data=json.dumps({'slug': '逼真豆沙毛毛虫'}, ensure_ascii=False),
+            content_type='application/json',
+            **self.headers,
+        )
+        resp = self.client.delete(
+            f'/api/favorites/{quote("逼真豆沙毛毛虫")}/', **self.headers
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(
+            FavoriteDish.objects.filter(slug='逼真豆沙毛毛虫').exists()
+        )
+
+    def test_unknown_slug_rejected(self):
+        resp = self.client.post(
+            '/api/favorites/',
+            data=json.dumps({'slug': '根本不存在的菜'}, ensure_ascii=False),
+            content_type='application/json',
+            **self.headers,
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_re_favorite_updates_not_duplicates(self):
+        for _ in range(2):
+            self.client.post(
+                '/api/favorites/',
+                data=json.dumps({'slug': 'tomato-beef'}),
+                content_type='application/json',
+                **self.headers,
+            )
+        self.assertEqual(FavoriteDish.objects.filter(slug='tomato-beef').count(), 1)
+
+
+class ChatSessionPaginationTests(TestCase):
+    """推荐官会话列表分页：offset/limit 与 total，旧接口行为兼容。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.token = _load_api_token()
+        cls.headers = {'HTTP_X_API_TOKEN': cls.token}
+        for i in range(3):
+            ChatSession.objects.create(title=f'会话{i}')
+
+    def test_first_page_with_limit(self):
+        body = self.client.get(
+            '/api/chat/sessions/?limit=2', **self.headers
+        ).json()
+        self.assertEqual(body['total'], 3)
+        self.assertEqual(len(body['sessions']), 2)
+        self.assertEqual(body['offset'], 0)
+        self.assertEqual(body['limit'], 2)
+
+    def test_second_page(self):
+        body = self.client.get(
+            '/api/chat/sessions/?offset=2&limit=2', **self.headers
+        ).json()
+        self.assertEqual(body['total'], 3)
+        self.assertEqual(len(body['sessions']), 1)
+
+    def test_invalid_params_fallback(self):
+        # limit=0 钳到下限 1，offset=-1 钳到 0
+        body = self.client.get(
+            '/api/chat/sessions/?limit=0&offset=-1', **self.headers
+        ).json()
+        self.assertEqual(body['limit'], 1)
+        self.assertEqual(body['offset'], 0)
+
+    def test_default_limit_is_20(self):
+        body = self.client.get('/api/chat/sessions/', **self.headers).json()
+        self.assertEqual(body['limit'], 20)
+        self.assertEqual(body['total'], 3)
+        self.assertEqual(len(body['sessions']), 3)

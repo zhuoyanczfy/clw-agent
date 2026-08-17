@@ -215,7 +215,9 @@ class DishService {
   }
 
   /// 收藏/取消收藏：本地立即生效，云端尽力同步（失败不阻断本地操作）。
-  static Future<bool> toggleFavorite(String slug) async {
+  /// 传完整菜品信息：每日菜单的菜不在菜库中，云端需内容快照才能展示。
+  static Future<bool> toggleFavorite(Dish dish) async {
+    final slug = dish.id;
     final prefs = await SharedPreferences.getInstance();
     final ids = (prefs.getStringList('favorite_dish_ids') ?? []).toList();
     final adding = !ids.contains(slug);
@@ -237,7 +239,15 @@ class DishService {
                 .post(
                   Uri.parse('$base/api/favorites/'),
                   headers: headers,
-                  body: jsonEncode({'slug': slug}),
+                  body: jsonEncode({
+                    'slug': slug,
+                    'name': dish.name,
+                    'category': dish.category,
+                    'description': dish.description,
+                    'ingredients': dish.ingredients,
+                    'steps': dish.steps,
+                    'image_url': dish.imageUrl,
+                  }),
                 )
                 .timeout(const Duration(seconds: 5))
             : await http
@@ -249,6 +259,42 @@ class DishService {
       }
     }
     return true;
+  }
+
+  /// 收藏列表：云端返回完整菜品信息（含每日菜单快照）；
+  /// 云端不可用/未配置时回退本地缓存 ids 从菜库匹配。
+  static Future<List<Dish>> fetchFavoriteDishes() async {
+    final base = await ApiConfig.getBaseUrl();
+    if (base.isNotEmpty) {
+      try {
+        // 先走合并同步：本地独有收藏（如云端失败期间新加的）补传到云端，
+        // 再取完整列表，保证离线/换机期间新增的收藏不丢
+        await syncFavoriteIds();
+        final resp = await http
+            .get(
+              Uri.parse('$base/api/favorites/'),
+              headers: {'X-Api-Token': AppConfig.apiToken},
+            )
+            .timeout(const Duration(seconds: 5));
+        if (resp.statusCode == 200) {
+          final json = jsonDecode(utf8.decode(resp.bodyBytes));
+          final list = json['favorites'] as List<dynamic>? ?? [];
+          final dishes = await Future.wait(list
+              .map((e) => Dish.fromJson(e as Map<String, dynamic>))
+              .map(_withFullImageUrl));
+          if (dishes.isNotEmpty) return dishes;
+        }
+      } catch (_) {
+        // 云端不可用，走本地缓存
+      }
+    }
+    final ids = await syncFavoriteIds();
+    final all = await fetchDishes();
+    return [
+      for (final id in ids)
+        for (final d in all)
+          if (d.id == id) d,
+    ];
   }
 
   static Future<void> _pushFavorite(String base, String slug) async {

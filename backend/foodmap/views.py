@@ -66,6 +66,55 @@ def _dish_json(d):
     }
 
 
+def _json_list(value):
+    """材料/步骤统一转 JSON 数组：兼容 list、JSON 数组字符串与按行文本。"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return parsed
+    except ValueError:
+        pass
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _snapshot_text(value):
+    """快照存储：列表序列化为 JSON 数组字符串，字符串原样保存。"""
+    if isinstance(value, list):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value or '').strip()
+
+
+def _page_int(raw, default, low, high=10 ** 6):
+    """分页参数解析：非法值回退默认，越界值钳制到区间。"""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, value))
+
+
+def _favorite_json(f):
+    """收藏序列化：关联菜库用菜品信息，池外菜品（如每日菜单）用内容快照。"""
+    if f.dish_id:
+        return _dish_json(f.dish)
+    return {
+        'id': f.slug,
+        'name': f.name,
+        'category': f.category,
+        'description': f.description,
+        'ingredients': _json_list(f.ingredients),
+        'steps': _json_list(f.steps),
+        'image_url': f.image_url,
+    }
+
+
 def dish_for_date(date_str):
     """按日期从数据库菜库取一道菜（md5(日期) 取模，与 APP 内置算法一致）。"""
     dishes = list(Dish.objects.filter(enabled=True).order_by('sort', 'id'))
@@ -115,10 +164,13 @@ def api_dish_by_date(request, date):
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_favorites(request):
-    """收藏的菜：GET 列表（按收藏时间倒序）；POST 添加，body {"slug": "tomato-beef"}。"""
+    """收藏的菜：GET 列表（按收藏时间倒序，返回完整菜品信息）；
+    POST 添加，body {"slug": "tomato-beef"}；菜库外的菜（如每日菜单）
+    可带完整内容 {"slug", "name", ...} 存快照，只传 slug 时按菜名从每日菜单补全。
+    """
     if request.method == 'GET':
         favs = FavoriteDish.objects.select_related('dish').order_by('-created_at')
-        return JsonResponse({'favorites': [_dish_json(f.dish) for f in favs]})
+        return JsonResponse({'favorites': [_favorite_json(f) for f in favs]})
 
     try:
         data = json.loads(request.body or b'{}')
@@ -127,10 +179,46 @@ def api_favorites(request):
     slug = (data.get('slug') or '').strip()
     if not slug:
         return JsonResponse({'error': '缺少菜品标识 slug'}, status=400)
+
     dish = Dish.objects.filter(slug=slug, enabled=True).first()
-    if not dish:
+    if dish is not None:
+        FavoriteDish.objects.update_or_create(
+            slug=slug,
+            defaults={
+                'dish': dish,
+                'name': dish.name,
+                'category': dish.category,
+                'description': dish.description,
+                'ingredients': dish.ingredients,
+                'steps': dish.steps,
+                'image_url': dish.image_url,
+            },
+        )
+        return JsonResponse({'ok': True})
+
+    # 菜库外（如每日菜单的菜）：先按菜名从每日菜单补全，其次用请求体快照
+    meal = DailyMeal.objects.filter(name=slug).order_by('-date').first()
+    if meal is not None:
+        defaults = {
+            'name': meal.name,
+            'category': meal.category,
+            'description': meal.description,
+            'ingredients': meal.ingredients,
+            'steps': meal.steps,
+            'image_url': meal.image_url,
+        }
+    elif (data.get('name') or '').strip():
+        defaults = {
+            'name': (data.get('name') or '').strip(),
+            'category': (data.get('category') or '').strip(),
+            'description': (data.get('description') or '').strip(),
+            'ingredients': _snapshot_text(data.get('ingredients')),
+            'steps': _snapshot_text(data.get('steps')),
+            'image_url': (data.get('image_url') or '').strip(),
+        }
+    else:
         return JsonResponse({'error': '菜品不存在'}, status=404)
-    FavoriteDish.objects.get_or_create(dish=dish)
+    FavoriteDish.objects.update_or_create(slug=slug, defaults=defaults)
     return JsonResponse({'ok': True})
 
 
@@ -138,8 +226,8 @@ def api_favorites(request):
 @csrf_exempt
 @require_http_methods(['DELETE'])
 def api_favorite_delete(request, slug):
-    """取消收藏，slug 形如 tomato-beef。"""
-    FavoriteDish.objects.filter(dish__slug=slug).delete()
+    """取消收藏，slug 形如 tomato-beef（菜库）或每日菜单菜名。"""
+    FavoriteDish.objects.filter(slug=slug).delete()
     return JsonResponse({'ok': True})
 
 
@@ -845,8 +933,17 @@ def api_chat_sessions(request):
     POST body: {"session_id": 可选, "title": 可选, "messages": [{role, content}]}
     """
     if request.method == 'GET':
-        qs = ChatSession.objects.order_by('-updated_at')[:50]
-        return JsonResponse({'sessions': [_chat_session_json(s) for s in qs]})
+        offset = _page_int(request.GET.get('offset'), 0, 0)
+        limit = _page_int(request.GET.get('limit'), 20, 1, 50)
+        qs = ChatSession.objects.order_by('-updated_at')
+        total = qs.count()
+        sessions = qs[offset:offset + limit]
+        return JsonResponse({
+            'total': total,
+            'offset': offset,
+            'limit': limit,
+            'sessions': [_chat_session_json(s) for s in sessions],
+        })
 
     try:
         data = json.loads(request.body or b'{}')
@@ -1418,30 +1515,14 @@ def _meal_json(m):
 
     材料/步骤统一输出 JSON 数组；旧式按行文本也兼容。
     """
-    def to_list(value):
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
-        text = str(value).strip()
-        if not text:
-            return []
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return parsed
-        except ValueError:
-            pass
-        return [l.strip() for l in text.splitlines() if l.strip()]
-
     if isinstance(m, DailyMeal):
         return {
             'id': m.name,
             'name': m.name,
             'category': m.category,
             'description': m.description,
-            'ingredients': to_list(m.ingredients),
-            'steps': to_list(m.steps),
+            'ingredients': _json_list(m.ingredients),
+            'steps': _json_list(m.steps),
             'image_url': m.image_url,
         }
     return {
@@ -1449,8 +1530,8 @@ def _meal_json(m):
         'name': m.get('name', ''),
         'category': m.get('category', ''),
         'description': m.get('description', ''),
-        'ingredients': to_list(m.get('ingredients', [])),
-        'steps': to_list(m.get('steps', [])),
+        'ingredients': _json_list(m.get('ingredients', [])),
+        'steps': _json_list(m.get('steps', [])),
         'image_url': m.get('image', ''),
     }
 

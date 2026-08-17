@@ -33,7 +33,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
   bool _busy = false;
   String _streaming = ''; // 正在流式生成中的内容
 
-  // 当前会话 id（null = 新会话）；历史会话保存在服务器，进入页面时恢复最近一条
+  // 当前会话 id（null = 新会话）；每次进入页面都从新会话开始，历史会话保存在服务器可回看
   int? _sessionId;
 
   // 会话加载序号：连续切换历史会话时只应用最后一次选择，避免「后点先返回」乱序
@@ -45,18 +45,6 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
   @override
   void initState() {
     super.initState();
-    _restoreLastSession();
-  }
-
-  /// 进入页面时恢复最近一次历史会话（失败静默，保持空会话）
-  Future<void> _restoreLastSession() async {
-    try {
-      final sessions = await FoodmapApi.chatSessions();
-      if (sessions.isEmpty || !mounted) return;
-      await _loadSession(sessions.first['id'] as int);
-    } catch (_) {
-      // 网络异常或服务器未部署新接口时忽略，不影响正常聊天
-    }
   }
 
   /// 加载指定历史会话到当前页面
@@ -110,7 +98,11 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         messages: messages,
       );
       if (mounted && _sessionId == targetId) {
-        setState(() => _sessionId = saved['id'] as int?);
+        setState(() {
+          _sessionId = saved['id'] as int?;
+          // 会话落盘后递增：下次打开历史抽屉时重建并拉到最新列表
+          _historyEpoch++;
+        });
       }
     } catch (_) {
       // 保存失败不打断聊天体验
@@ -314,60 +306,50 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     }
   }
 
-  /// 打开历史会话列表（切换/删除/新建）
-  Future<void> _showHistory() async {
-    List<Map<String, dynamic>> sessions;
-    try {
-      sessions = await FoodmapApi.chatSessions();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('加载历史会话失败：$e')));
-      }
-      return;
-    }
-    if (!mounted) return;
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => ChatHistorySheet(
-        sessions: sessions,
-        currentId: _sessionId,
-        onSelect: (s) {
-          Navigator.pop(sheetCtx);
-          _loadSession(s['id'] as int);
-        },
-        onNew: () {
-          Navigator.pop(sheetCtx);
-          setState(() {
-            _messages.clear();
-            _recommended.clear();
-            _sessionId = null;
-          });
-        },
-        onDelete: (s) async {
-          await FoodmapApi.deleteChatSession(s['id'] as int);
-          if (!mounted) return;
-          // 删除的是当前会话时，页面回到空会话
-          if (_sessionId == s['id']) {
+  /// 打开历史会话抽屉（切换/删除/新建会话）。
+  /// epoch 递增强制抽屉重建，保证每次打开都拉最新列表。
+  int _historyEpoch = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // 左侧历史会话抽屉：像网页 agent 一样挂在页面左侧
+      drawer: Drawer(
+        width: 300,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.horizontal(right: Radius.circular(16)),
+        ),
+        child: ChatHistorySheet(
+          key: ValueKey(_historyEpoch),
+          currentId: _sessionId,
+          onSelect: (s) {
+            Navigator.of(context).pop();
+            _loadSession(s['id'] as int);
+          },
+          onNew: () {
+            Navigator.of(context).pop();
             setState(() {
               _messages.clear();
               _recommended.clear();
               _sessionId = null;
             });
-          }
-        },
+          },
+          onDelete: (s) async {
+            await FoodmapApi.deleteChatSession(s['id'] as int);
+            if (!mounted) return;
+            // 删除的是当前会话时，页面回到空会话
+            if (_sessionId == s['id']) {
+              setState(() {
+                _messages.clear();
+                _recommended.clear();
+                _sessionId = null;
+              });
+            }
+          },
+          onLoadPage: (offset, limit) =>
+              FoodmapApi.chatSessions(offset: offset, limit: limit),
+        ),
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
       appBar: AppBar(
         title: const Text('美食推荐官'),
         actions: [
@@ -379,12 +361,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
             tooltip: '待尝清单',
           ),
           IconButton(
-            onPressed: _busy ? null : _showHistory,
-            icon: const Icon(Icons.history),
-            tooltip: '历史会话',
-          ),
-          IconButton(
-            // 清空 = 开始新会话（历史仍保留在服务器）
+            // 新会话（历史仍保留在服务器，可从历史会话进入）
             onPressed: _busy
                 ? null
                 : () => setState(() {
@@ -392,8 +369,8 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                       _recommended.clear();
                       _sessionId = null;
                     }),
-            icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: '清空对话',
+            icon: const Icon(Icons.add_comment_outlined),
+            tooltip: '新会话',
           ),
         ],
       ),

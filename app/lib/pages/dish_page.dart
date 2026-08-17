@@ -31,7 +31,7 @@ class _DishPageState extends State<DishPage> {
   }
 
   Future<void> _toggleFavorite() async {
-    await DishService.toggleFavorite(widget.dish.id);
+    await DishService.toggleFavorite(widget.dish);
     if (!mounted) return;
     setState(() => _isFavorite = !_isFavorite);
     ScaffoldMessenger.of(context).showSnackBar(

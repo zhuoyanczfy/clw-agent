@@ -159,15 +159,27 @@ class PetEvent(models.Model):
 
 
 class FavoriteDish(models.Model):
-    """每日美食收藏：APP 内收藏想吃的菜（单用户，一道菜一条记录）。
+    """美食收藏：菜库菜品关联 Dish，每日菜单等池外菜品存内容快照。
 
-    旧版收藏存 APP 本地（SharedPreferences），本模型上云后 APP 启动时把
-    本地收藏迁到云端，后续云端为准、本地仅做离线缓存。
+    slug 是收藏标识（菜库 slug 或每日菜单菜名），APP 收藏按 slug 存储；
+    云端返回完整菜品信息（关联或快照），离线时 APP 本地缓存兜底。
     """
 
-    dish = models.OneToOneField(
-        Dish, on_delete=models.CASCADE, related_name='favorite', verbose_name='菜品'
+    dish = models.ForeignKey(
+        Dish,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='favorite',
+        verbose_name='关联菜库菜品',
     )
+    slug = models.CharField('收藏标识', max_length=100, unique=True)
+    name = models.CharField('菜名', max_length=100)
+    category = models.CharField('菜系/分类', max_length=50, blank=True)
+    description = models.TextField('专属文案', blank=True)
+    ingredients = models.TextField('材料用量', blank=True)
+    steps = models.TextField('制作方法', blank=True)
+    image_url = models.CharField('成品图', max_length=500, blank=True)
     created_at = models.DateTimeField('收藏时间', auto_now_add=True)
 
     class Meta:
@@ -176,7 +188,7 @@ class FavoriteDish(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return self.dish.name
+        return self.name
 
 
 class AppConfig(models.Model):

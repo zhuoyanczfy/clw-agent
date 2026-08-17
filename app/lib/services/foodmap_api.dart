@@ -484,13 +484,20 @@ class FoodmapApi {
 
   // ---------- AI 推荐官（SSE 流式聊天） ----------
 
-  /// 历史会话列表（按更新时间倒序，最多 50 条）。
-  static Future<List<Map<String, dynamic>>> chatSessions() async {
-    final json = await _getJson('/api/chat/sessions/') as Map<String, dynamic>;
-    return [
+  /// 历史会话分页列表（按更新时间倒序）。返回 (本页会话, 总数)，
+  /// 触底翻页时用 [offset] = 已加载条数继续拉。
+  static Future<(List<Map<String, dynamic>>, int)> chatSessions({
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final json = await _getJson(
+      '/api/chat/sessions/?offset=$offset&limit=$limit',
+    ) as Map<String, dynamic>;
+    final sessions = [
       for (final s in (json['sessions'] as List? ?? const []))
         Map<String, dynamic>.from(s as Map),
     ];
+    return (sessions, json['total'] as int? ?? 0);
   }
 
   /// 单会话详情（含 messages：[{role, content}]）。

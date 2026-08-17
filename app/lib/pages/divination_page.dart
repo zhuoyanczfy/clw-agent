@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/divination.dart';
 import '../services/foodmap_api.dart';
-import '../services/remote_config.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 

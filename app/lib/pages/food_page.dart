@@ -27,14 +27,8 @@ class _FoodPageState extends State<FoodPage> {
 
   Future<void> _load() async {
     final dish = await DishService.getTodayDish();
-    final all = await DishService.fetchDishes();
-    final ids = await DishService.syncFavoriteIds();
-    // 收藏列表从完整菜库匹配（云端为准，离线时用本地缓存）
-    final favDishes = <Dish>[];
-    for (final id in ids) {
-      final match = all.where((d) => d.id == id);
-      if (match.isNotEmpty) favDishes.add(match.first);
-    }
+    // 收藏列表：云端返回完整菜品信息（每日菜单的菜也能展示），离线回退本地缓存
+    final favDishes = await DishService.fetchFavoriteDishes();
     if (!mounted) return;
     setState(() {
       _todayDish = dish;
@@ -45,7 +39,7 @@ class _FoodPageState extends State<FoodPage> {
   }
 
   Future<void> _toggleFavorite(Dish dish) async {
-    await DishService.toggleFavorite(dish.id);
+    await DishService.toggleFavorite(dish);
     await _load();
   }
 
