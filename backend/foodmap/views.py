@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from django import forms
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -1199,6 +1199,27 @@ def _draw_three_cards(date_str):
     return cards
 
 
+def _parse_reading(text, cards):
+    """从 DeepSeek 回复中解析【今日解读】与【幸运指引】两段。
+
+    模型偶尔不守格式，用正则加兜底：解读缺失时整体回退，指引缺失时用未来牌生成。
+    """
+    reading, lucky = '', ''
+    m = re.search(r'【今日解读】\s*(.*?)(?=【幸运指引】|$)', text, re.S)
+    if m:
+        reading = m.group(1).strip()
+    m = re.search(r'【幸运指引】\s*(.*)', text)
+    if m:
+        lucky = m.group(1).strip()
+    if not reading:
+        reading = text
+    if not lucky:
+        # 模型漏输出幸运指引时，用“未来”位置的牌生成有意义的兜底，而非死板默认值
+        future_card = cards[-1]
+        lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
+    return reading, lucky
+
+
 def _generate_reading(cards, her_name):
     """调用 DeepSeek 为三张牌阵生成当日解读，失败时返回兜底文案。"""
     name = (her_name or '').strip() or '你'
@@ -1234,58 +1255,49 @@ def _generate_reading(cards, her_name):
         },
     ]
     text = chat(messages, temperature=0.9, timeout=60).strip()
-    # 解析【今日解读】与【幸运指引】两段；模型偶尔不守格式，用正则加兜底
-    reading, lucky = '', ''
-    m = re.search(r'【今日解读】\s*(.*?)(?=【幸运指引】|$)', text, re.S)
-    if m:
-        reading = m.group(1).strip()
-    m = re.search(r'【幸运指引】\s*(.*)$', text, re.S)
-    if m:
-        lucky = m.group(1).strip()
-    if not reading:
-        reading = text
-    if not lucky:
-        # 模型漏输出幸运指引时，用“未来”位置的牌生成有意义的兜底，而非死板默认值
-        future_card = cards[-1]
-        lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
-    return reading, lucky
+    return _parse_reading(text, cards)
 
 
 @require_api_token
 def api_divination_today(request):
-    """今日占卜：当天首次请求抽牌并调 DeepSeek 生成解读，之后直接返回缓存（零点自动刷新）。"""
+    """今日占卜：当天首次请求抽牌并调 DeepSeek 生成解读，之后直接返回缓存（零点自动刷新）。
+
+    并发下用 select_for_update 串行化首次生成：后到的请求会等第一个请求落库后
+    直接命中缓存，避免重复调用 DeepSeek 浪费额度（update_or_create 只能防重复落库）。
+    """
     today = timezone.localdate().isoformat()
-    cached = Divination.objects.filter(date=today).first()
-    if cached:
-        return JsonResponse({'date': today, 'cached': True, 'divination': _divination_json(cached)})
+    with transaction.atomic():
+        cached = Divination.objects.select_for_update().filter(date=today).first()
+        if cached:
+            return JsonResponse({'date': today, 'cached': True, 'divination': _divination_json(cached)})
 
-    cards = _draw_three_cards(today)
-    # 昵称取不到配置时用全局默认值，与 APP 端 RemoteConfig 展示保持一致
-    her_name = (
-        AppConfig.objects.filter(key='her_name').values_list('value', flat=True).first()
-        or APP_CONFIG_DEFAULTS['her_name']
-    )
-    try:
-        reading, lucky = _generate_reading(cards, her_name)
-    except LLMError as exc:
-        # DeepSeek 不可用时也落库兜底文案，保证当天后续请求稳定返回
-        names = '、'.join(f"{c['name']}（{c['orientation']}）" for c in cards)
-        reading = (
-            f'今天抽到的是三张牌阵：{names}。'
-            '星星暂时躲进了云里，占卜师没能连线成功，但好运气并不会缺席——'
-            '愿你今天被温柔对待，遇到的都是小美好。'
+        cards = _draw_three_cards(today)
+        # 昵称取不到配置时用全局默认值，与 APP 端 RemoteConfig 展示保持一致
+        her_name = (
+            AppConfig.objects.filter(key='her_name').values_list('value', flat=True).first()
+            or APP_CONFIG_DEFAULTS['her_name']
         )
-        future_card = cards[-1]
-        lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
+        try:
+            reading, lucky = _generate_reading(cards, her_name)
+        except LLMError as exc:
+            # DeepSeek 不可用时也落库兜底文案，保证当天后续请求稳定返回
+            names = '、'.join(f"{c['name']}（{c['orientation']}）" for c in cards)
+            reading = (
+                f'今天抽到的是三张牌阵：{names}。'
+                '星星暂时躲进了云里，占卜师没能连线成功，但好运气并不会缺席——'
+                '愿你今天被温柔对待，遇到的都是小美好。'
+            )
+            future_card = cards[-1]
+            lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
 
-    obj, _ = Divination.objects.update_or_create(
-        date=today,
-        defaults={
-            'cards': cards,
-            'reading': reading,
-            'lucky': lucky,
-        },
-    )
+        obj, _ = Divination.objects.update_or_create(
+            date=today,
+            defaults={
+                'cards': cards,
+                'reading': reading,
+                'lucky': lucky,
+            },
+        )
     return JsonResponse({'date': today, 'cached': False, 'divination': _divination_json(obj)})
 
 
@@ -1320,44 +1332,48 @@ def _quote_json(q):
 @require_api_token
 def api_quote_today(request):
     """今日好句：按日期缓存，当天首次请求从 hitokoto.cn 拉取并取 Pixabay 配图。
-    配图失败导致 image_url 为空时，后续请求会重试补图（自愈）。"""
+    配图失败导致 image_url 为空时，后续请求会重试补图（自愈）。
+
+    并发下用 select_for_update 串行化首次生成，避免重复调用外部付费/限频 API。
+    """
     today = timezone.localdate().isoformat()
-    cached = Quote.objects.filter(date=today).first()
-    if cached and cached.image_url:
-        return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
+    with transaction.atomic():
+        cached = Quote.objects.select_for_update().filter(date=today).first()
+        if cached and cached.image_url:
+            return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
 
-    if cached:
-        # 已有句子但缺配图：用落库的关键词重试补图，成功则更新返回，失败仍返回原缓存
+        if cached:
+            # 已有句子但缺配图：用落库的关键词重试补图，成功则更新返回，失败仍返回原缓存
+            from .services.cover_image import fetch_cover_url
+            image_url = fetch_cover_url(cached.image_keyword)
+            if image_url:
+                cached.image_url = image_url
+                cached.save(update_fields=['image_url'])
+            return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
+
+        # 从 hitokoto.cn 拉取
+        from .data.quotes import fetch_hitokoto
+        item = fetch_hitokoto()
+        if not item:
+            return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
+
+        # Pixabay 配图：一次性取好落库，避免历史列表重复请求（免费额度 100 次/小时）
         from .services.cover_image import fetch_cover_url
-        image_url = fetch_cover_url(cached.image_keyword)
-        if image_url:
-            cached.image_url = image_url
-            cached.save(update_fields=['image_url'])
-        return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
+        image_url = fetch_cover_url(item['image_keyword'])
 
-    # 从 hitokoto.cn 拉取
-    from .data.quotes import fetch_hitokoto
-    item = fetch_hitokoto()
-    if not item:
-        return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
-
-    # Pixabay 配图：一次性取好落库，避免历史列表重复请求（免费额度 100 次/小时）
-    from .services.cover_image import fetch_cover_url
-    image_url = fetch_cover_url(item['image_keyword'])
-
-    obj, _ = Quote.objects.update_or_create(
-        date=today,
-        defaults={
-            'text': item['text'],
-            'author': item['author'],
-            'source': item['source'],
-            'category': item['category'],
-            'image_keyword': item['image_keyword'],
-            'image_url': image_url,
-            'uuid': item['uuid'],
-            'detail_url': item['detail_url'],
-        },
-    )
+        obj, _ = Quote.objects.update_or_create(
+            date=today,
+            defaults={
+                'text': item['text'],
+                'author': item['author'],
+                'source': item['source'],
+                'category': item['category'],
+                'image_keyword': item['image_keyword'],
+                'image_url': image_url,
+                'uuid': item['uuid'],
+                'detail_url': item['detail_url'],
+            },
+        )
     return JsonResponse({'date': today, 'cached': False, 'quote': _quote_json(obj)})
 
 

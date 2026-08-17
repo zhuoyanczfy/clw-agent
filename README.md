@@ -103,7 +103,7 @@ python manage.py runserver 0.0.0.0:8000
 | `GET /api/weather/` | 天气预报（高德代理，首页天气条与天气关怀提醒） |
 | `GET/POST /api/pets/` | 宠物名片（信息/照片/成长事件） |
 | `GET /api/divination/today/` | 每日塔罗占卜（三张牌阵「时间之流」+ 韦特塔罗套图 + DeepSeek 解读，按日期缓存） |
-| `GET /api/quotes/today/` | 今日好句（hitokoto 文学/哲学 + Unsplash 配图，按日期缓存） |
+| `GET /api/quotes/today/` | 今日好句（hitokoto 文学/哲学 + Pixabay 配图，按日期缓存） |
 | `GET /api/quotes/history/` | 历史好句列表（倒序 30 条） |
 | `GET /api/quotes/random/` | 再来一条（实时拉取，不缓存） |
 

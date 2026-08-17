@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import configparser
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -33,6 +35,12 @@ SECRET_KEY = (
     if _IS_PROD
     else 'django-insecure-2sgct1c$7t=ygmf(#n*&lb!bp!fg_6dwu^&7-5jfvv$8&aw@7d'
 )
+
+if _IS_PROD and not SECRET_KEY:
+    # 生产环境 secret_key 缺失会静默退化为空串，导致 session/CSRF/signing 失效，启动即报错
+    raise ImproperlyConfigured(
+        '生产环境必须在 backend/config/config.ini 的 [deploy] 节配置 secret_key'
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = not _IS_PROD

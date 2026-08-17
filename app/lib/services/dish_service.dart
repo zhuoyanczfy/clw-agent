@@ -196,8 +196,16 @@ class DishService {
             await prefs.setStringList('favorite_dish_ids', localIds);
             return localIds;
           }
-          await prefs.setStringList('favorite_dish_ids', remoteIds);
-          return remoteIds;
+          // 云端非空：以云端为主，同时把本地独有的收藏补传云端
+          // （离线/换机期间本地新增的收藏不丢失）
+          final merged = remoteIds.toSet().union(localIds.toSet()).toList();
+          for (final id in localIds) {
+            if (!remoteIds.contains(id)) {
+              await _pushFavorite(base, id);
+            }
+          }
+          await prefs.setStringList('favorite_dish_ids', merged);
+          return merged;
         }
       } catch (_) {
         // 云端不可用，用本地缓存

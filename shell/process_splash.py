@@ -17,7 +17,11 @@ from pathlib import Path
 
 from PIL import Image
 
-BASE = Path(__file__).resolve().parent  # shell/（config.ini 在上一级 backend/config/）
+BASE = Path(__file__).resolve().parent  # shell/（config.ini 在 backend/config/）
+
+
+CONFIG_INI = BASE.parent / 'backend' / 'config' / 'config.ini'
+
 
 EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
 
@@ -25,7 +29,7 @@ EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
 def load_token():
     parser = configparser.ConfigParser()
     parser.read_string(
-        '[default]\n' + (BASE.parent / 'config' / 'config.ini').read_text(encoding='utf-8')
+        '[default]\n' + CONFIG_INI.read_text(encoding='utf-8')
     )
     return parser.get('default', 'upload_token', fallback='').strip()
 

@@ -13,7 +13,7 @@ CATEGORIES = ['d', 'k']
 MIN_LENGTH = 15
 MAX_LENGTH = 80
 
-# 分类码 → 中文名 + Unsplash 配图关键词
+# 分类码 → 中文名 + Pixabay 配图关键词
 CATEGORY_MAP = {
     'a': ('动画', 'anime scenery'),
     'b': ('漫画', 'manga art'),
