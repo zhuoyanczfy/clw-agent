@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AppConfig,
+    ChatSession,
     DailyMeal,
     DiningRecord,
     Dish,
@@ -99,6 +100,16 @@ class WishlistItemAdmin(admin.ModelAdmin):
     search_fields = ('name', 'reason')
 
 
+@admin.register(ChatSession)
+class ChatSessionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'message_count', 'created_at', 'updated_at')
+    search_fields = ('title',)
+
+    @admin.display(description='消息数')
+    def message_count(self, obj):
+        return len(obj.messages or [])
+
+
 @admin.register(AppConfig)
 class AppConfigAdmin(admin.ModelAdmin):
     """APP 云端配置（改完 APP 下次启动自动生效，无需重打包）。"""
@@ -119,9 +130,17 @@ class SplashImageAdmin(admin.ModelAdmin):
 class DivinationAdmin(admin.ModelAdmin):
     """每日占卜缓存：当天首次占卜生成，可在后台查看或删除后重新生成。"""
 
-    list_display = ('date', 'card_name', 'orientation', 'lucky', 'created_at')
-    search_fields = ('card_name', 'reading')
+    list_display = ('date', 'cards_preview', 'lucky', 'created_at')
+    search_fields = ('reading',)
     date_hierarchy = 'date'
+
+    @admin.display(description='三张牌')
+    def cards_preview(self, obj):
+        parts = [
+            f"{c.get('position', '')}·{c.get('name', '')}({c.get('orientation', '')})"
+            for c in (obj.cards or [])
+        ]
+        return ' | '.join(parts)
 
 
 @admin.register(Quote)

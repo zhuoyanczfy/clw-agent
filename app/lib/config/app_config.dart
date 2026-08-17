@@ -7,10 +7,10 @@
 ///    如更换服务器，可在 APP「设置」页修改后端地址（高级功能，一般不用动）
 class AppConfig {
   /// 她的昵称（显示在首页顶部和欢迎语里）
-  static const String herName = '小仙女';
+  static const String herName = '陈隶文';
 
   /// 你们认识的日期（格式 YYYY-MM-DD），用于计算认识天数
-  static const String meetDate = '2026-01-01';
+  static const String meetDate = '2026-07-23';
 
   /// 首页专属欢迎语
   static const String greeting = '今天也要好好吃饭呀';

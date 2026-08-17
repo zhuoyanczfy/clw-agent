@@ -14,12 +14,14 @@ from django.db import IntegrityError
 from django.db.models import Count
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .auth import require_api_token
 from .models import (
     AppConfig,
+    ChatSession,
     DailyMeal,
     DiningRecord,
     DiningRecordPhoto,
@@ -86,7 +88,7 @@ def api_dishes(request):
 @require_api_token
 def api_dish_today(request):
     """今日推荐（与 APP 内置算法一致：md5(日期) 取模）。"""
-    today = datetime.date.today().isoformat()
+    today = timezone.localdate().isoformat()
     dish = dish_for_date(today)
     return JsonResponse(
         {'date': today, 'dish': _dish_json(dish) if dish else None}
@@ -230,14 +232,27 @@ def _restaurant_json(r, with_records=False):
 
 @require_api_token
 def api_restaurants(request):
-    """餐厅列表。?district=区名 过滤；?visited=1 只看去过（地图标记用）。"""
+    """餐厅列表。
+
+    ?district=区名 过滤；?visited=1 只看去过（地图标记用）；
+    ?q=关键词 按名称模糊搜索（带 q 时最多返回 50 条，供记录页选餐厅用）。
+    """
     qs = Restaurant.objects.select_related('district').annotate(rec_count=Count('records'))
     district = request.GET.get('district')
+    q = (request.GET.get('q') or '').strip()
+    visited = request.GET.get('visited') == '1'
+    if q:
+        qs = qs.filter(name__icontains=q)
     if district:
         qs = qs.filter(district__name=district)
-    if request.GET.get('visited') == '1':
+    if visited:
         qs = qs.filter(rec_count__gt=0)
     qs = qs.order_by('-rec_count', '-rating', 'name')
+    if q:
+        qs = qs[:50]
+    elif not (district or visited):
+        # 无任何过滤条件时兜底限 200 条，避免拉全库 2.5 万条（足迹页用 visited=1 不受影响）
+        qs = qs[:200]
     return JsonResponse({'restaurants': [_restaurant_json(r) for r in qs]})
 
 
@@ -269,7 +284,8 @@ def _record_json(record, with_photos=True):
         'comment': record.comment,
         'per_capita': record.per_capita,
         'mood': record.mood,
-        'created_at': record.created_at.strftime('%Y-%m-%d %H:%M'),
+        # USE_TZ=True 时 auto_now 存 UTC，输出前转本地时间（Asia/Shanghai）
+        'created_at': timezone.localtime(record.created_at).strftime('%Y-%m-%d %H:%M'),
     }
     if with_photos:
         data['photos'] = [_photo_json(p) for p in record.photos.all()]
@@ -294,9 +310,16 @@ def _record_from_data(data, record=None):
             raise ValueError('新餐厅必须选择所属区')
         fields['restaurant'] = Restaurant.objects.create(name=name, district=district)
 
-    for key, default in (('rating', 4), ('per_capita', None)):
-        value = data.get(key, default)
-        if key == 'per_capita':
+    for key in ('rating', 'per_capita'):
+        value = data.get(key, 4 if key == 'rating' else None)
+        if key == 'rating':
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                value = 4
+            if not 1 <= value <= 5:
+                raise ValueError('评分需在 1-5 之间')
+        else:  # per_capita
             try:
                 value = int(value) if value else None
             except (TypeError, ValueError):
@@ -392,6 +415,8 @@ def api_photo_upload(request, record_id):
     photo_field = forms.ImageField()
     saved = []
     for f in request.FILES.getlist('photos'):
+        if f.size > 5 * 1024 * 1024:
+            return JsonResponse({'error': f'照片「{f.name}」超过 5MB，请压缩后再传'}, status=400)
         try:
             photo_field.clean(f)
         except forms.ValidationError as exc:
@@ -430,7 +455,7 @@ def _wishlist_json(item):
         'per_capita': item.per_capita,
         'status': item.status,
         'source': item.source,
-        'created_at': item.created_at.strftime('%Y-%m-%d %H:%M'),
+        'created_at': timezone.localtime(item.created_at).strftime('%Y-%m-%d %H:%M'),
     }
 
 
@@ -547,7 +572,7 @@ def _pet_photo_json(ph):
         'id': ph.pk,
         'image': ph.image.url,
         'caption': ph.caption,
-        'created_at': ph.created_at.strftime('%Y-%m-%d'),
+        'created_at': timezone.localtime(ph.created_at).strftime('%Y-%m-%d'),
     }
 
 
@@ -797,6 +822,83 @@ def api_recommend_verify(request):
     return JsonResponse({'ok': True, 'items': results})
 
 
+# ============ 推荐官会话（历史保存） ============
+
+
+def _chat_session_json(session):
+    """会话摘要（列表用，不含 messages）。"""
+    return {
+        'id': session.pk,
+        'title': session.title,
+        'message_count': len(session.messages or []),
+        'created_at': timezone.localtime(session.created_at).strftime('%Y-%m-%d %H:%M'),
+        'updated_at': timezone.localtime(session.updated_at).strftime('%Y-%m-%d %H:%M'),
+    }
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_chat_sessions(request):
+    """推荐官会话列表（GET）或保存/新建（POST，整体 upsert）。
+
+    POST body: {"session_id": 可选, "title": 可选, "messages": [{role, content}]}
+    """
+    if request.method == 'GET':
+        qs = ChatSession.objects.order_by('-updated_at')[:50]
+        return JsonResponse({'sessions': [_chat_session_json(s) for s in qs]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': '请求体必须是 JSON 对象'}, status=400)
+
+    raw = data.get('messages') or []
+    if not isinstance(raw, list):
+        return JsonResponse({'error': 'messages 必须是数组'}, status=400)
+    for m in raw:
+        if not isinstance(m, dict):
+            return JsonResponse({'error': '消息项必须是对象'}, status=400)
+        role = m.get('role')
+        content = m.get('content')
+        if role not in ('user', 'assistant') or not isinstance(content, str) or not content.strip():
+            return JsonResponse({'error': '消息 role/content 非法'}, status=400)
+    messages = [{'role': m.get('role'), 'content': m.get('content').strip()} for m in raw]
+    session_id = data.get('session_id')
+    if session_id is not None and not isinstance(session_id, int):
+        return JsonResponse({'error': 'session_id 无效'}, status=400)
+    if session_id:
+        session = ChatSession.objects.filter(pk=session_id).first()
+        if not session:
+            return JsonResponse({'error': '会话不存在'}, status=404)
+    else:
+        session = ChatSession()
+
+    title = (data.get('title') or '').strip()
+    if not title:
+        title = next((m['content'] for m in messages if m['role'] == 'user'), '')[:30]
+    session.title = title
+    session.messages = messages
+    session.save()
+    return JsonResponse({'session': _chat_session_json(session)})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'DELETE'])
+def api_chat_session_detail(request, session_id):
+    """单会话：GET 返回详情（含 messages），DELETE 删除。"""
+    session = get_object_or_404(ChatSession, pk=session_id)
+    if request.method == 'DELETE':
+        session.delete()
+        return JsonResponse({'ok': True})
+    data = _chat_session_json(session)
+    data['messages'] = session.messages or []
+    return JsonResponse({'session': data})
+
+
 @require_api_token
 @csrf_exempt
 @require_http_methods(['POST'])
@@ -901,8 +1003,8 @@ def api_chat(request):
 # 配置默认值：Admin 添加同名 AppConfig 条目即覆盖（APP 启动自动拉取，无需重打包）
 APP_CONFIG_DEFAULTS = {
     # 专属信息
-    'her_name': '小仙女',
-    'meet_date': '2026-01-01',
+    'her_name': '陈隶文',
+    'meet_date': '2026-07-23',
     'greeting': '今天也要好好吃饭呀',
     'daily_dish_title': '今天想带你吃',
     # 通知文案（{herName} / {dishName} 会被替换）
@@ -979,7 +1081,7 @@ def api_splash(request):
     if not images:
         return JsonResponse({'error': '还没有加载页图片，请先在后台或上传接口添加'}, status=404)
 
-    today = datetime.date.today().isoformat()
+    today = timezone.localdate().isoformat()
     state, _ = SplashState.objects.get_or_create(pk=1)
     # 当天已展示过：继续用同一张（避免同一天多次打开来回闪图）
     if state.last_date == today and state.last_id:
@@ -1047,19 +1149,64 @@ TAROT_CARDS = {
     '世界': '圆满 · 完成 · 旅程的收获',
 }
 
+# 牌名 → 塔罗牌图片文件名（韦特塔罗，公有领域）
+TAROT_CARD_IMAGES = {
+    '愚人': '00_fool.jpg',
+    '魔术师': '01_magician.jpg',
+    '女祭司': '02_high_priestess.jpg',
+    '女皇': '03_empress.jpg',
+    '皇帝': '04_emperor.jpg',
+    '教皇': '05_hierophant.jpg',
+    '恋人': '06_lovers.jpg',
+    '战车': '07_chariot.jpg',
+    '力量': '08_strength.jpg',
+    '隐士': '09_hermit.jpg',
+    '命运之轮': '10_wheel_of_fortune.jpg',
+    '正义': '11_justice.jpg',
+    '倒吊人': '12_hanged_man.jpg',
+    '死神': '13_death.jpg',
+    '节制': '14_temperance.jpg',
+    '恶魔': '15_devil.jpg',
+    '高塔': '16_tower.jpg',
+    '星星': '17_star.jpg',
+    '月亮': '18_moon.jpg',
+    '太阳': '19_sun.jpg',
+    '审判': '20_judgement.jpg',
+    '世界': '21_world.jpg',
+}
 
-def _draw_tarot_card(date_str):
-    """抽一张牌：以日期哈希为种子，同一天恒定，天然保证正逆位固定。"""
+
+def _draw_three_cards(date_str):
+    """抽三张不重复的牌（时间之流牌阵：过去-现在-未来）：
+    以日期哈希为种子，同一天恒定，天然保证正逆位固定。
+    """
     seed = int(hashlib.md5(f'tarot-{date_str}'.encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
-    card = rng.choice(list(TAROT_CARDS.items()))
-    orientation = '正位' if rng.random() < 0.7 else '逆位'
-    return card[0], card[1], orientation
+    names = rng.sample(list(TAROT_CARDS), 3)
+    positions = ('过去', '现在', '未来')
+    cards = []
+    for position, name in zip(positions, names):
+        orientation = '正位' if rng.random() < 0.7 else '逆位'
+        cards.append(
+            {
+                'position': position,
+                'name': name,
+                'orientation': orientation,
+                'keyword': TAROT_CARDS[name],
+                'image': f'/media/tarot/{TAROT_CARD_IMAGES[name]}',
+            }
+        )
+    return cards
 
 
-def _generate_reading(card_name, keyword, orientation, her_name):
-    """调用 DeepSeek 生成当日解读，失败时返回兜底文案。"""
+def _generate_reading(cards, her_name):
+    """调用 DeepSeek 为三张牌阵生成当日解读，失败时返回兜底文案。"""
     name = (her_name or '').strip() or '你'
+
+    def _card_line(card):
+        return f"{card['position']}：「{card['name']} · {card['orientation']}」，牌意关键词：{card['keyword']}"
+
+    card_lines = '\n'.join(_card_line(c) for c in cards)
     messages = [
         {
             'role': 'system',
@@ -1071,15 +1218,16 @@ def _generate_reading(card_name, keyword, orientation, her_name):
         {
             'role': 'user',
             'content': (
-                f'今天是{name}抽到的牌：「{card_name} · {orientation}」，牌意关键词：{keyword}。\n'
+                f'今天是{name}抽到的三张牌阵（时间之流：过去-现在-未来）：\n'
+                f'{card_lines}\n'
                 '请为今天写一段塔罗解读，你的回答必须严格符合以下格式：\n'
                 '只输出恰好两行：第一行以【今日解读】开头，第二行以【幸运指引】开头；'
                 '不要有任何前言、后语、解释、编号或其他符号；两行顺序不可颠倒；'
                 '标记符号只能用中文全角【】，不要用括号、冒号等其他符号代替。\n'
-                '【今日解读】120~180字，结合牌意聊聊她今天的运势、心情和值得留意的小美好，'
-                '语言要像在她耳边轻声说话一样温柔。\n'
+                '【今日解读】120~180字，把三张牌串成一个完整的故事：过去的位置轻轻回顾、'
+                '现在的位置描述今日课题、未来的位置给出温柔展望，语言要像在她耳边轻声说话。\n'
                 '【幸运指引】20字以内的一句今日幸运提示（如幸运色、幸运小物或一个温暖的小建议）。\n'
-                '输出格式示例（仅为格式参考，内容请结合今天的牌重新写，不要照抄）：\n'
+                '输出格式示例（仅为格式参考，内容请结合今天的三张牌重新写，不要照抄）：\n'
                 '【今日解读】<一段温柔解读>\n'
                 '【幸运指引】<一句幸运提示>'
             ),
@@ -1097,41 +1245,43 @@ def _generate_reading(card_name, keyword, orientation, her_name):
     if not reading:
         reading = text
     if not lucky:
-        lucky = '幸运色：奶杏黄'
+        # 模型漏输出幸运指引时，用“未来”位置的牌生成有意义的兜底，而非死板默认值
+        future_card = cards[-1]
+        lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
     return reading, lucky
 
 
 @require_api_token
 def api_divination_today(request):
     """今日占卜：当天首次请求抽牌并调 DeepSeek 生成解读，之后直接返回缓存（零点自动刷新）。"""
-    today = datetime.date.today().isoformat()
+    today = timezone.localdate().isoformat()
     cached = Divination.objects.filter(date=today).first()
     if cached:
         return JsonResponse({'date': today, 'cached': True, 'divination': _divination_json(cached)})
 
-    card_name, keyword, orientation = _draw_tarot_card(today)
+    cards = _draw_three_cards(today)
     # 昵称取不到配置时用全局默认值，与 APP 端 RemoteConfig 展示保持一致
     her_name = (
         AppConfig.objects.filter(key='her_name').values_list('value', flat=True).first()
         or APP_CONFIG_DEFAULTS['her_name']
     )
     try:
-        reading, lucky = _generate_reading(card_name, keyword, orientation, her_name)
+        reading, lucky = _generate_reading(cards, her_name)
     except LLMError as exc:
         # DeepSeek 不可用时也落库兜底文案，保证当天后续请求稳定返回
+        names = '、'.join(f"{c['name']}（{c['orientation']}）" for c in cards)
         reading = (
-            f'今天抽到的是「{card_name} · {orientation}」，{keyword}。'
+            f'今天抽到的是三张牌阵：{names}。'
             '星星暂时躲进了云里，占卜师没能连线成功，但好运气并不会缺席——'
-            '愿你今天被温柔以待，遇到的都是小美好。'
+            '愿你今天被温柔对待，遇到的都是小美好。'
         )
-        lucky = '幸运色：奶杏黄'
+        future_card = cards[-1]
+        lucky = f"幸运指引：未来牌「{future_card['name']}」提醒你，{future_card['keyword']}"
 
     obj, _ = Divination.objects.update_or_create(
         date=today,
         defaults={
-            'card_name': card_name,
-            'orientation': orientation,
-            'keyword': keyword,
+            'cards': cards,
             'reading': reading,
             'lucky': lucky,
         },
@@ -1141,9 +1291,7 @@ def api_divination_today(request):
 
 def _divination_json(d):
     return {
-        'card_name': d.card_name,
-        'orientation': d.orientation,
-        'keyword': d.keyword,
+        'cards': d.cards,
         'reading': d.reading,
         'lucky': d.lucky,
     }
@@ -1173,7 +1321,7 @@ def _quote_json(q):
 def api_quote_today(request):
     """今日好句：按日期缓存，当天首次请求从 hitokoto.cn 拉取并取 Pixabay 配图。
     配图失败导致 image_url 为空时，后续请求会重试补图（自愈）。"""
-    today = datetime.date.today().isoformat()
+    today = timezone.localdate().isoformat()
     cached = Quote.objects.filter(date=today).first()
     if cached and cached.image_url:
         return JsonResponse({'date': today, 'cached': True, 'quote': _quote_json(cached)})
@@ -1295,7 +1443,7 @@ def _meal_json(m):
 def api_meal_today(request):
     """今日菜单：按日期缓存。当天首次访问从菜谱池随机抽一道落库，之后返回同一道。"""
     from .services import meal_pool
-    today = datetime.date.today()
+    today = timezone.localdate()
     meal = DailyMeal.objects.filter(date=today).first()
     if meal:
         return JsonResponse({'date': today.isoformat(), 'cached': True, 'meal': _meal_json(meal)})
@@ -1334,7 +1482,7 @@ def api_meal_history(request):
 def api_meal_random(request):
     """随机菜单：从菜谱池随机抽一道，不落库、不影响今日菜单；尽量避开今日已选。"""
     from .services import meal_pool
-    today_meal = DailyMeal.objects.filter(date=datetime.date.today()).first()
+    today_meal = DailyMeal.objects.filter(date=timezone.localdate()).first()
     today_name = today_meal.name if today_meal else None
     item = None
     for _ in range(5):

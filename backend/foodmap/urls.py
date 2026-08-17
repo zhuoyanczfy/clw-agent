@@ -35,6 +35,8 @@ urlpatterns = [
     path('api/pets/<int:pet_id>/events/', views.api_pet_events, name='pet_events'),
     path('api/pets/events/<int:event_id>/', views.api_pet_event_delete, name='pet_event_delete'),
     # AI 智能推荐
+    path('api/chat/sessions/', views.api_chat_sessions, name='chat_sessions'),
+    path('api/chat/sessions/<int:session_id>/', views.api_chat_session_detail, name='chat_session_detail'),
     path('api/recommend/chat/', views.api_chat, name='recommend_chat'),
     path('api/recommend/verify/', views.api_recommend_verify, name='recommend_verify'),
     # APP 云端配置

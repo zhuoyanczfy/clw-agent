@@ -53,25 +53,31 @@ class _DishPageState extends State<DishPage> {
             children: [
               Stack(
                 children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 10,
-                    child: CachedNetworkImage(
-                      imageUrl: dish.imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, _) => Container(
-                        color: const Color(0xFFFFF3D6),
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (_, _, _) => Container(
-                        color: const Color(0xFFFFF3D6),
-                        child: const Center(
-                            child: Text('🫕', style: TextStyle(fontSize: 64))),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 10,
+                        child: CachedNetworkImage(
+                          imageUrl: dish.imageUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, _) => Container(
+                            color: const Color(0xFFFFF3D6),
+                            child: const Center(child: CircularProgressIndicator()),
+                          ),
+                          errorWidget: (_, _, _) => Container(
+                            color: const Color(0xFFFFF3D6),
+                            child: const Center(
+                                child: Text('🫕', style: TextStyle(fontSize: 64))),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                   Positioned(
-                    top: 8,
-                    left: 8,
+                    top: 20,
+                    left: 24,
                     child: IconButton.filledTonal(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.arrow_back),
@@ -81,8 +87,8 @@ class _DishPageState extends State<DishPage> {
                     ),
                   ),
                   Positioned(
-                    top: 8,
-                    right: 8,
+                    top: 20,
+                    right: 24,
                     child: IconButton.filledTonal(
                       onPressed: _toggleFavorite,
                       icon: Icon(

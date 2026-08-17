@@ -6,8 +6,9 @@ MAP_KEY=你的高德Web服务Key
 # 天气查询城市编码（adcode），缺省 320100（南京）
 WEATHER_ADCODE=320100
 
-# API 鉴权令牌（APP 请求头 X-Api-Token，与 app/lib/config/app_config.dart 的 apiToken 保持一致）
-API_TOKEN=clw-api-8f3k2j9h4g5d6s7a
+# API 鉴权令牌（APP 请求头 X-Api-Token，与 app/lib/config/app_config.dart 的 apiToken 保持一致；
+# 部署时请生成随机值：python -c "import secrets; print(secrets.token_urlsafe(24))"）
+API_TOKEN=请改成随机字符串
 
 # 内容上传令牌（加载页图片/故事上传接口的请求头 X-Upload-Token，留空则禁用 API 上传）
 UPLOAD_TOKEN=

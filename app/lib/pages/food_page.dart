@@ -122,41 +122,61 @@ class _FoodPageState extends State<FoodPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: CachedNetworkImage(
-                    imageUrl: dish.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (_, _) => Container(
-                      color: const Color(0xFFFFF3D6),
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (_, _, _) => Container(
-                      color: const Color(0xFFFFF3D6),
-                      child: const Center(
-                          child: Text('🫕', style: TextStyle(fontSize: 48))),
+            // 图片：宽高各缩为原来的一半，居中展示
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final imageWidth = constraints.maxWidth * 0.5;
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SizedBox(
+                      width: imageWidth,
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: CachedNetworkImage(
+                                imageUrl: dish.imageUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (_, _) => Container(
+                                  color: const Color(0xFFFFF3D6),
+                                  child: const Center(
+                                      child: CircularProgressIndicator()),
+                                ),
+                                errorWidget: (_, _, _) => Container(
+                                  color: const Color(0xFFFFF3D6),
+                                  child: const Center(
+                                      child: Text('🫕',
+                                          style: TextStyle(fontSize: 36))),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 8,
+                            bottom: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                dish.category,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 12,
-                  bottom: 12,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      dish.category,
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
             Padding(
               padding: const EdgeInsets.all(16),

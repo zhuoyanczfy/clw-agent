@@ -227,12 +227,14 @@ class SplashState(models.Model):
 
 
 class Divination(models.Model):
-    """每日占卜结果：按日期缓存，当天多次打开返回同一次抽牌与解读，零点自动刷新。"""
+    """每日占卜结果：按日期缓存，当天多次打开返回同一次抽牌与解读，零点自动刷新。
+
+    三张牌阵（时间之流）：cards 为 JSON 数组，每项
+    {"position": "过去/现在/未来", "name", "orientation", "keyword"}。
+    """
 
     date = models.DateField('占卜日期', unique=True)
-    card_name = models.CharField('塔罗牌', max_length=50)
-    orientation = models.CharField('牌向', max_length=10)  # 正位 / 逆位
-    keyword = models.CharField('关键词', max_length=100, blank=True)
+    cards = models.JSONField('三张牌', default=list)
     reading = models.TextField('今日解读', blank=True)
     lucky = models.CharField('幸运指引', max_length=200, blank=True)
     created_at = models.DateTimeField('生成时间', auto_now_add=True)
@@ -243,7 +245,8 @@ class Divination(models.Model):
         ordering = ['-date']
 
     def __str__(self):
-        return f'{self.date} {self.card_name}（{self.orientation}）'
+        names = '、'.join(c.get('name', '') for c in (self.cards or []))
+        return f'{self.date} {names}'
 
 
 class Quote(models.Model):
@@ -372,3 +375,23 @@ class WishlistItem(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ChatSession(models.Model):
+    """推荐官聊天会话：单用户，完整对话存 messages（JSON 数组 [{role, content}]）。
+
+    APP 每次回复流结束后整体保存（upsert），下次进入推荐官页时恢复最近会话。
+    """
+
+    title = models.CharField('标题', max_length=50, blank=True, help_text='取首条用户消息前 30 字')
+    messages = models.JSONField('消息列表', default=list, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '推荐官会话'
+        verbose_name_plural = '推荐官会话'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f'{self.title or "会话"} #{self.pk}'

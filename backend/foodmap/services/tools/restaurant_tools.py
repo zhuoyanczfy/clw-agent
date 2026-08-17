@@ -8,19 +8,24 @@
 
 数据来源：餐厅导入时存了基础字段，photos/tag/cost 采取「推荐时增量回填」
 ——只对即将被推荐的餐厅实时查询高德补全，避免全库 2.5 万家的海量调用。
+
+本地库无匹配时，自动转高德在线搜索兜底（结果落库，下次本地可查）。
 """
 import json
 import logging
 import time
 
-from foodmap.models import Restaurant
+from foodmap.models import District, Restaurant
 from foodmap.services import amap
-from foodmap.services.amap import wgs84_to_gcj02
+from foodmap.services.amap import gcj02_to_wgs84, wgs84_to_gcj02
 
 logger = logging.getLogger(__name__)
 
 # 每次推荐最多实时补查的餐厅数（按评分从高到低取，控制工具耗时与高德 QPS）
 ENRICH_LIMIT = 3
+
+# 高德兜底搜索最多落库返回的餐厅数（控制卡片数量与写入量）
+AMAP_FALLBACK_LIMIT = 10
 
 
 def _parse_photos(raw):
@@ -92,32 +97,120 @@ def _enrich(restaurants, limit=ENRICH_LIMIT):
     return restaurants
 
 
+def _to_result(r):
+    """Restaurant -> 工具结果 JSON（本地库与高德兜底共用同一格式）。"""
+    photos = _parse_photos(r.photos)
+    return {
+        'id': r.pk,
+        'name': r.name,
+        'address': r.address or '',
+        'district': r.district.name if r.district else '',
+        'rating': r.rating,
+        'amap_id': r.amap_id or '',
+        'photos': photos,
+        'tags': [t for t in (r.tag or '').split(',') if t.strip()],
+        'cost': r.cost,
+        'image': (photos or [{}])[0].get('url')
+        or _static_map_url(r.lat, r.lng),
+    }
+
+
+def _save_amap_poi(poi):
+    """高德 POI 落库（按 amap_id upsert），返回 Restaurant；无法入馆返回 None。
+
+    坐标 GCJ-02 -> WGS-84，同时把 photos/tag/cost/rating 一并写库，
+    下次再搜同类关键词时本地即可命中，无需再调高德。
+    """
+    poi_id = poi.get('id')
+    adname = (poi.get('adname') or '').strip()
+    name = (poi.get('name') or '').strip()[:100]
+    if not poi_id or not name or not adname:
+        return None
+    try:
+        district = District.objects.get(name=adname)
+    except District.DoesNotExist:
+        return None
+    lat = lng = None
+    location = poi.get('location', '')
+    if location:
+        try:
+            lng, lat = (float(x) for x in location.split(','))
+        except ValueError:
+            lng = lat = None
+        else:
+            lng, lat = gcj02_to_wgs84(lng, lat)
+    biz = poi.get('biz_ext') or {}
+    rating = None
+    try:
+        rating = float(biz.get('rating'))
+    except (TypeError, ValueError):
+        rating = None
+    cost = None
+    try:
+        cost = float(biz.get('cost') or '') or None
+    except (TypeError, ValueError):
+        cost = None
+    photos = [
+        {'title': ph.get('title') or '', 'url': ph.get('url') or ''}
+        for ph in (poi.get('photos') or [])
+        if ph.get('url')
+    ]
+    try:
+        return Restaurant.objects.update_or_create(
+            amap_id=poi_id,
+            defaults={
+                'name': name,
+                'district': district,
+                'address': (poi.get('address') or '').strip()[:200],
+                'lat': lat,
+                'lng': lng,
+                'rating': rating,
+                'photos': json.dumps(photos, ensure_ascii=False),
+                'tag': (poi.get('tag') or '')[:300],
+                'cost': cost,
+            },
+        )[0]
+    except Exception:
+        logger.exception('高德 POI %s 落库失败', poi_id)
+        return None
+
+
+def _search_amap(keyword, district=''):
+    """本地库无匹配时的兜底：高德在线搜索并落库，返回统一格式 JSON 字符串。
+
+    高德失败静默降级返回空数组 []（调用方应诚实告知用户）。
+    """
+    try:
+        pois = amap.search_text(keyword, city='南京')
+    except amap.AMAPError as exc:
+        logger.warning('高德兜底搜索 %s 失败: %s', keyword, exc)
+        return '[]'
+    results = []
+    for poi in pois:
+        if len(results) >= AMAP_FALLBACK_LIMIT:
+            break
+        if district and (poi.get('adname') or '') != district:
+            continue
+        r = _save_amap_poi(poi)
+        if r is not None:
+            results.append(_to_result(r))
+    logger.info('高德兜底搜索 %s（区=%s）：返回 %d 家', keyword, district or '-', len(results))
+    return json.dumps(results, ensure_ascii=False)
+
+
 def search_restaurants(keyword: str, district: str = '') -> str:
-    """按名称关键词（+可选区名）搜索本地真实餐厅库，返回 JSON 字符串列表。
+    """按名称关键词（+可选区名）搜索真实餐厅库，返回 JSON 字符串列表。
 
     结果按高德评分降序取前 10 家，字段：
     id/name/address/district/rating/amap_id/photos/tags/cost/image。
-    无命中返回空数组 []（调用方应诚实告知用户）。
+    本地库无匹配时自动转高德在线搜索并落库（下次本地可查）；
+    高德也查不到才返回空数组 []（调用方应诚实告知用户）。
     """
     qs = Restaurant.objects.filter(name__icontains=keyword)
     if district:
         qs = qs.filter(district__name=district)
     qs = qs.order_by('-rating', 'name')[:10]
     restaurants = _enrich(list(qs))
-    results = [
-        {
-            'id': r.pk,
-            'name': r.name,
-            'address': r.address or '',
-            'district': r.district.name if r.district else '',
-            'rating': r.rating,
-            'amap_id': r.amap_id or '',
-            'photos': _parse_photos(r.photos),
-            'tags': [t for t in (r.tag or '').split(',') if t.strip()],
-            'cost': r.cost,
-            'image': (_parse_photos(r.photos) or [{}])[0].get('url')
-            or _static_map_url(r.lat, r.lng),
-        }
-        for r in restaurants
-    ]
-    return json.dumps(results, ensure_ascii=False)
+    if restaurants:
+        return json.dumps([_to_result(r) for r in restaurants], ensure_ascii=False)
+    return _search_amap(keyword, district)

@@ -329,25 +329,31 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Stack(
                       children: [
-                        AspectRatio(
-                          aspectRatio: 16 / 9,
-                          child: CachedNetworkImage(
-                            imageUrl: dish.imageUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (_, _) => Container(
-                              color: const Color(0xFFFFF3D6),
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                            errorWidget: (_, _, _) => Container(
-                              color: const Color(0xFFFFF3D6),
-                              child: const Center(
-                                child: HeartBeat(
-                                  maxScale: 1.1,
-                                  child: Text(
-                                    '🫕',
-                                    style: TextStyle(fontSize: 48),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: CachedNetworkImage(
+                                imageUrl: dish.imageUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (_, _) => Container(
+                                  color: const Color(0xFFFFF3D6),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                                errorWidget: (_, _, _) => Container(
+                                  color: const Color(0xFFFFF3D6),
+                                  child: const Center(
+                                    child: HeartBeat(
+                                      maxScale: 1.1,
+                                      child: Text(
+                                        '🫕',
+                                        style: TextStyle(fontSize: 48),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -355,8 +361,8 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                         Positioned(
-                          left: 12,
-                          bottom: 12,
+                          left: 24,
+                          bottom: 24,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,

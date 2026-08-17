@@ -159,16 +159,22 @@ class FoodmapApi {
     return jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
   }
 
-  /// 餐厅列表；[district] 按区名过滤，[visitedOnly] 只看去过（地图标记）
-  static Future<List<Restaurant>> fetchRestaurants({String? district, bool visitedOnly = false}) async {
+  /// 餐厅列表；[district] 按区名过滤，[visitedOnly] 只看去过（地图标记），
+  /// [query] 关键词搜索（后端最多返回 50 条，供记录页选餐厅用）
+  static Future<List<Restaurant>> fetchRestaurants({
+    String? district,
+    bool visitedOnly = false,
+    String? query,
+  }) async {
     final params = <String, String>{
       if (district != null && district.isNotEmpty) 'district': district,
       if (visitedOnly) 'visited': '1',
+      if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
     };
-    final query = params.isEmpty
+    final queryStr = params.isEmpty
         ? ''
         : '?${params.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
-    final json = await _getJson('/api/restaurants/$query') as Map<String, dynamic>;
+    final json = await _getJson('/api/restaurants/$queryStr') as Map<String, dynamic>;
     return (json['restaurants'] as List)
         .map((e) => Restaurant.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -477,6 +483,39 @@ class FoodmapApi {
       _deleteJson('/api/pets/events/$eventId/');
 
   // ---------- AI 推荐官（SSE 流式聊天） ----------
+
+  /// 历史会话列表（按更新时间倒序，最多 50 条）。
+  static Future<List<Map<String, dynamic>>> chatSessions() async {
+    final json = await _getJson('/api/chat/sessions/') as Map<String, dynamic>;
+    return [
+      for (final s in (json['sessions'] as List? ?? const []))
+        Map<String, dynamic>.from(s as Map),
+    ];
+  }
+
+  /// 单会话详情（含 messages：[{role, content}]）。
+  static Future<Map<String, dynamic>> chatSessionDetail(int id) async {
+    final json = await _getJson('/api/chat/sessions/$id/') as Map<String, dynamic>;
+    return Map<String, dynamic>.from(json['session'] as Map);
+  }
+
+  /// 保存会话：带 [sessionId] 则更新，否则新建。返回会话摘要（含新 id）。
+  static Future<Map<String, dynamic>> saveChatSession({
+    int? sessionId,
+    String title = '',
+    required List<Map<String, String>> messages,
+  }) async {
+    final json = await _postJson('/api/chat/sessions/', {
+      'session_id': ?sessionId,
+      'title': title,
+      'messages': messages,
+    }) as Map<String, dynamic>;
+    return Map<String, dynamic>.from(json['session'] as Map);
+  }
+
+  /// 删除会话。
+  static Future<void> deleteChatSession(int id) =>
+      _deleteJson('/api/chat/sessions/$id/');
 
   /// 发送消息并流式接收回复。返回 `Stream<String>`（增量文本），onDone 表示流结束。
   /// [history] 为之前 user/assistant 消息列表（不含本轮）。

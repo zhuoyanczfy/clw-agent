@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -34,7 +35,6 @@ class _RecordFormPageState extends State<RecordFormPage> {
   int _rating = 4;
 
   List<District> _districts = [];
-  List<Restaurant> _restaurants = [];
   bool _loadingDistricts = true;
   bool _saving = false;
 
@@ -49,6 +49,8 @@ class _RecordFormPageState extends State<RecordFormPage> {
     super.initState();
     final r = widget.record;
     if (r != null) {
+      // 回填餐厅 ID，否则直接保存时后端会因缺少餐厅报 400
+      if (r.restaurantId > 0) _selectedRestaurantId = r.restaurantId;
       _restaurantCtrl.text = r.restaurant;
       _commentCtrl.text = r.comment;
       _moodCtrl.text = r.mood;
@@ -71,15 +73,12 @@ class _RecordFormPageState extends State<RecordFormPage> {
   }
 
   Future<void> _loadOptions() async {
+    // 只加载区列表（11 个）；餐厅改为按需搜索，避免拉全量 2 万+ 家卡住页面。
     try {
-      final results = await Future.wait([
-        FoodmapApi.fetchDistricts(),
-        FoodmapApi.fetchRestaurants(),
-      ]);
+      final districts = await FoodmapApi.fetchDistricts();
       if (!mounted) return;
       setState(() {
-        _districts = results[0] as List<District>;
-        _restaurants = results[1] as List<Restaurant>;
+        _districts = districts;
         _loadingDistricts = false;
       });
     } catch (e) {
@@ -88,6 +87,22 @@ class _RecordFormPageState extends State<RecordFormPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('加载选项失败：$e')));
     }
+  }
+
+  /// 打开底部搜索面板选已有餐厅，点选后回填。
+  Future<void> _pickExistingRestaurant() async {
+    final picked = await showModalBottomSheet<Restaurant>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _RestaurantSearchSheet(
+        initial: _selectedRestaurantId != null ? _restaurantCtrl.text : '',
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedRestaurantId = picked.id;
+      _restaurantCtrl.text = picked.name;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -208,7 +223,13 @@ class _RecordFormPageState extends State<RecordFormPage> {
                           // 编辑模式：餐厅已定，不允许切换
                           onChanged: (v) {
                             if (_isEdit) return;
-                            setState(() => _createNew = v == 1);
+                            setState(() {
+                              _createNew = v == 1;
+                              if (_createNew) {
+                                _selectedRestaurantId = null;
+                                _restaurantCtrl.clear();
+                              }
+                            });
                           },
                           child: Column(
                             children: [
@@ -219,25 +240,16 @@ class _RecordFormPageState extends State<RecordFormPage> {
                               if (!_createNew)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                                  child: DropdownButtonFormField<int>(
-                                    initialValue: _selectedRestaurantId,
-                                    isExpanded: true,
+                                  child: TextFormField(
+                                    controller: _restaurantCtrl,
+                                    readOnly: true,
+                                    onTap: _pickExistingRestaurant,
                                     decoration: const InputDecoration(
                                       hintText: '搜索或选择餐厅',
+                                      prefixIcon: Icon(Icons.search),
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
-                                    items: [
-                                      for (final r in _restaurants)
-                                        DropdownMenuItem(
-                                          value: r.id,
-                                          child: Text(
-                                            '${r.name}（${r.district}）',
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                    ],
-                                    onChanged: (v) => setState(() => _selectedRestaurantId = v),
                                   ),
                                 ),
                               const RadioListTile<int>(
@@ -427,6 +439,141 @@ class _RecordFormPageState extends State<RecordFormPage> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// 底部弹出的餐厅搜索选择器：输入关键词实时搜索（后端限 50 条），点选返回。
+class _RestaurantSearchSheet extends StatefulWidget {
+  final String initial;
+  const _RestaurantSearchSheet({this.initial = ''});
+
+  @override
+  State<_RestaurantSearchSheet> createState() => _RestaurantSearchSheetState();
+}
+
+class _RestaurantSearchSheetState extends State<_RestaurantSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+  List<Restaurant> _results = [];
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.text = widget.initial;
+    if (widget.initial.isNotEmpty) _search(widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    setState(() {}); // 立即刷新清除按钮显隐
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () => _search(value));
+  }
+
+  Future<void> _search(String keyword) async {
+    final q = keyword.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _results = [];
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await FoodmapApi.fetchRestaurants(query: q);
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '搜索失败：$e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                onChanged: _onChanged,
+                decoration: InputDecoration(
+                  hintText: '输入餐厅名关键词（如：火锅）',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            _onChanged('');
+                          },
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(child: Text(_error!))
+                      : _results.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  widget.initial.isEmpty
+                                      ? '输入关键词搜索餐厅'
+                                      : '没有匹配的餐厅，可以选「新餐厅（我来录入）」',
+                                  style: const TextStyle(color: AppTheme.textLight),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _results.length,
+                              itemBuilder: (context, i) {
+                                final r = _results[i];
+                                return ListTile(
+                                  title: Text(r.name,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text('${r.district} · 已记录 ${r.recordCount} 次'),
+                                  onTap: () => Navigator.pop(context, r),
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

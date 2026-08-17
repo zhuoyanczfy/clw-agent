@@ -8,6 +8,8 @@ import '../services/foodmap_api.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'wishlist_page.dart';
+import 'ai_restaurant_detail_page.dart';
+import 'chat_history_sheet.dart';
 
 /// 聊天消息
 class _ChatMsg {
@@ -31,8 +33,89 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
   bool _busy = false;
   String _streaming = ''; // 正在流式生成中的内容
 
+  // 当前会话 id（null = 新会话）；历史会话保存在服务器，进入页面时恢复最近一条
+  int? _sessionId;
+
+  // 会话加载序号：连续切换历史会话时只应用最后一次选择，避免「后点先返回」乱序
+  int _loadSeq = 0;
+
   // AI 最近推荐过的餐厅（用于「收藏」按钮）
   final List<Map<String, dynamic>> _recommended = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreLastSession();
+  }
+
+  /// 进入页面时恢复最近一次历史会话（失败静默，保持空会话）
+  Future<void> _restoreLastSession() async {
+    try {
+      final sessions = await FoodmapApi.chatSessions();
+      if (sessions.isEmpty || !mounted) return;
+      await _loadSession(sessions.first['id'] as int);
+    } catch (_) {
+      // 网络异常或服务器未部署新接口时忽略，不影响正常聊天
+    }
+  }
+
+  /// 加载指定历史会话到当前页面
+  Future<void> _loadSession(int id) async {
+    final seq = ++_loadSeq;
+    try {
+      final session = await FoodmapApi.chatSessionDetail(id);
+      if (!mounted || seq != _loadSeq) return;
+      final msgs = <_ChatMsg>[
+        for (final m in (session['messages'] as List? ?? const []))
+          if (m is Map && (m['content'] ?? '').toString().isNotEmpty)
+            _ChatMsg(
+              (m['role'] ?? '').toString() == 'assistant' ? 'assistant' : 'user',
+              (m['content'] ?? '').toString(),
+            ),
+      ];
+      if (msgs.isEmpty) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(msgs);
+        // 清空推荐卡：无卡片的会话不能残留上一会话的推荐
+        _recommended.clear();
+        _sessionId = id;
+      });
+      // 恢复最近一次回复的推荐卡片
+      for (final m in msgs.reversed) {
+        if (m.role == 'assistant') {
+          _extractRecommendations(m.content);
+          break;
+        }
+      }
+      _scrollToBottom();
+    } catch (_) {
+      // 加载失败静默
+    }
+  }
+
+  /// 流结束后把当前会话整体保存到服务器（upsert）
+  Future<void> _saveSession() async {
+    final messages = <Map<String, String>>[
+      for (final m in _messages)
+        if (m.content.isNotEmpty) {'role': m.role, 'content': m.content},
+    ];
+    if (messages.isEmpty) return;
+    // 快照会话 id：响应返回时若用户已切换/清空会话，不回写旧会话 id，避免串写
+    final targetId = _sessionId;
+    try {
+      final saved = await FoodmapApi.saveChatSession(
+        sessionId: targetId,
+        messages: messages,
+      );
+      if (mounted && _sessionId == targetId) {
+        setState(() => _sessionId = saved['id'] as int?);
+      }
+    } catch (_) {
+      // 保存失败不打断聊天体验
+    }
+  }
 
   @override
   void dispose() {
@@ -85,6 +168,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         _busy = false;
       });
       _extractRecommendations(reply);
+      _saveSession();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -182,6 +266,16 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
       final s = t.toString().trim();
       if (s.isNotEmpty && !tags.contains(s)) tags.add(s);
     }
+    // 高德门店照片组（url 数组，展示图/顾客实拍混合）
+    final photos = <Map<String, String>>[];
+    for (final p in (item['photos'] as List?) ?? const []) {
+      if (p is Map) {
+        final url = (p['url'] ?? '').toString().trim();
+        if (url.isNotEmpty) {
+          photos.add({'url': url, 'title': (p['title'] ?? '').toString()});
+        }
+      }
+    }
     return {
       'name': (item['name'] ?? '').toString(),
       'district': (item['district'] ?? '').toString(),
@@ -192,6 +286,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
       'rating': toDouble(item['rating']),
       'per_capita': toDouble(item['per_capita']),
       'tags': tags,
+      'photos': photos,
     };
   }
 
@@ -219,6 +314,57 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     }
   }
 
+  /// 打开历史会话列表（切换/删除/新建）
+  Future<void> _showHistory() async {
+    List<Map<String, dynamic>> sessions;
+    try {
+      sessions = await FoodmapApi.chatSessions();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载历史会话失败：$e')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => ChatHistorySheet(
+        sessions: sessions,
+        currentId: _sessionId,
+        onSelect: (s) {
+          Navigator.pop(sheetCtx);
+          _loadSession(s['id'] as int);
+        },
+        onNew: () {
+          Navigator.pop(sheetCtx);
+          setState(() {
+            _messages.clear();
+            _recommended.clear();
+            _sessionId = null;
+          });
+        },
+        onDelete: (s) async {
+          await FoodmapApi.deleteChatSession(s['id'] as int);
+          if (!mounted) return;
+          // 删除的是当前会话时，页面回到空会话
+          if (_sessionId == s['id']) {
+            setState(() {
+              _messages.clear();
+              _recommended.clear();
+              _sessionId = null;
+            });
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -233,7 +379,19 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
             tooltip: '待尝清单',
           ),
           IconButton(
-            onPressed: _busy ? null : () => setState(() => _messages.clear()),
+            onPressed: _busy ? null : _showHistory,
+            icon: const Icon(Icons.history),
+            tooltip: '历史会话',
+          ),
+          IconButton(
+            // 清空 = 开始新会话（历史仍保留在服务器）
+            onPressed: _busy
+                ? null
+                : () => setState(() {
+                      _messages.clear();
+                      _recommended.clear();
+                      _sessionId = null;
+                    }),
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: '清空对话',
           ),
@@ -364,7 +522,11 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     return BouncyIn(
       offsetY: 12,
       duration: const Duration(milliseconds: 350),
-      child: Container(
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => AiRestaurantDetailPage(item: item)),
+        ),
+        child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         constraints: BoxConstraints(
@@ -525,6 +687,7 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -557,7 +720,9 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
     final tags = (item['tags'] as List?)?.cast<String>() ?? const <String>[];
     final tagText = tags.take(3).join(' · ');
     return GestureDetector(
-      onTap: () => _collect(item),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => AiRestaurantDetailPage(item: item)),
+      ),
       child: Container(
         width: 150,
         margin: const EdgeInsets.only(right: 10),
