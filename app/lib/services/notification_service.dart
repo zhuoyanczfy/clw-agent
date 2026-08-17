@@ -32,6 +32,8 @@ class NotificationService {
   /// 初始化插件、时区并请求权限
   static Future<void> init() async {
     tzdata.initializeTimeZones();
+    // 必须显式指定本地时区：默认 UTC 会导致所有定时提醒比设定时间晚 8 小时触发
+    tz.setLocalLocation(tz.getLocation('Asia/Shanghai'));
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidInit);
     await _plugin.initialize(initSettings);
