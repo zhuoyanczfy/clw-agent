@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""菜谱池：从 meal_pool.json（HowToCook 开源菜谱）加载并随机抽取。
+"""菜谱池：从 meal_pool.json（美食天下 meishichina.com 爬取的菜谱）加载并随机抽取。
 
-meal_pool.json 由 tmp/howtocook_refetch.py 生成，字段：
+meal_pool.json 由 tmp 下的美食天下爬虫脚本生成（含下载到本地的封面图），字段：
 {name, category, image(相对路径), description, ingredients[], steps[]}
 """
 import json

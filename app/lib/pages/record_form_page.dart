@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -37,6 +38,13 @@ class _RecordFormPageState extends State<RecordFormPage> {
   List<District> _districts = [];
   bool _loadingDistricts = true;
   bool _saving = false;
+
+  /// 编辑模式：记录已有的照片（含本次新上传的）
+  late final List<RecordPhoto> _existingPhotos =
+      _isEdit ? [...?widget.record?.photos] : [];
+
+  /// 新建模式：暂存的本地照片，保存时统一上传
+  final List<String> _pendingPhotoPaths = [];
 
   int? _selectedRestaurantId; // 选择已有餐厅
   int? _selectedNewDistrictId; // 新建餐厅的区
@@ -124,8 +132,9 @@ class _RecordFormPageState extends State<RecordFormPage> {
     final paths = [for (final f in files) f.path];
     if (_isEdit) {
       try {
-        await FoodmapApi.uploadPhotos(widget.record!.id, paths);
+        final uploaded = await FoodmapApi.uploadPhotos(widget.record!.id, paths);
         if (!mounted) return;
+        setState(() => _existingPhotos.addAll(uploaded));
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('照片已上传')));
       } catch (e) {
@@ -133,12 +142,70 @@ class _RecordFormPageState extends State<RecordFormPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('上传失败：$e')));
       }
     } else {
-      _pendingPhotoPaths = [..._pendingPhotoPaths, ...paths];
+      _pendingPhotoPaths.addAll(paths);
       setState(() {});
     }
   }
 
-  List<String> _pendingPhotoPaths = [];
+  /// 删除已有照片：确认后调后端删除，成功后从本地列表移除
+  Future<void> _deletePhoto(RecordPhoto photo) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除这张照片？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await FoodmapApi.deletePhoto(photo.id);
+      if (!mounted) return;
+      setState(() => _existingPhotos.removeWhere((p) => p.id == photo.id));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('照片已删除')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：$e')));
+    }
+  }
+
+  /// 照片缩略图（90×90，右上角删除按钮）
+  Widget _photoThumb({required Key key, required Widget child, required VoidCallback onDelete}) {
+    return ClipRRect(
+      key: key,
+      borderRadius: BorderRadius.circular(10),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          Positioned(
+            top: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 13, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -397,6 +464,38 @@ class _RecordFormPageState extends State<RecordFormPage> {
                       ),
                     ],
                   ),
+                  // 编辑模式：已有照片预览（含本次新上传的），右上角 ✕ 可删除
+                  if (_isEdit && _existingPhotos.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 90,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _existingPhotos.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final photo = _existingPhotos[i];
+                          return _photoThumb(
+                            key: ValueKey('photo-${photo.id}'),
+                            onDelete: () => _deletePhoto(photo),
+                            child: FutureBuilder<String>(
+                              future: FoodmapApi.photoUrl(photo.url),
+                              builder: (context, snap) => CachedNetworkImage(
+                                imageUrl: snap.data ?? '',
+                                fit: BoxFit.cover,
+                                errorWidget: (_, _, _) => Container(
+                                  color: const Color(0xFFF0EAE4),
+                                  child: const Icon(Icons.broken_image,
+                                      color: AppTheme.textLight),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  // 新建模式：待上传照片预览，右上角 ✕ 可移除
                   if (_pendingPhotoPaths.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     SizedBox(
@@ -405,15 +504,14 @@ class _RecordFormPageState extends State<RecordFormPage> {
                         scrollDirection: Axis.horizontal,
                         itemCount: _pendingPhotoPaths.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemBuilder: (context, i) => ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
+                        itemBuilder: (context, i) => _photoThumb(
+                          key: ValueKey('pending-$i'),
+                          onDelete: () =>
+                              setState(() => _pendingPhotoPaths.removeAt(i)),
                           child: Image.file(
                             File(_pendingPhotoPaths[i]),
-                            width: 90,
-                            height: 90,
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => Container(
-                              width: 90,
                               color: const Color(0xFFF0EAE4),
                               child: const Icon(Icons.broken_image,
                                   color: AppTheme.textLight),

@@ -39,8 +39,25 @@ class _FoodPageState extends State<FoodPage> {
   }
 
   Future<void> _toggleFavorite(Dish dish) async {
+    final wasFavorite = _favorites.any((d) => d.id == dish.id);
     await DishService.toggleFavorite(dish);
     await _load();
+    if (!mounted || !wasFavorite) return;
+    // 取消收藏：提供撤销入口，避免误触后无法找回
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已取消收藏「${dish.name}」'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () async {
+            await DishService.toggleFavorite(dish);
+            if (!mounted) return;
+            await _load();
+          },
+        ),
+      ),
+    );
   }
 
   @override

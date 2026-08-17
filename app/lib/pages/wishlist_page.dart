@@ -104,6 +104,8 @@ class _WishlistPageState extends State<WishlistPage> {
   }
 
   Future<void> _toggleEaten(WishlistItem item) async {
+    // 待吃 → 已吃直接切换；已吃 → 删除记录属于破坏性操作，先确认
+    if (!item.isPending && !await _confirmDelete(item)) return;
     try {
       if (item.isPending) {
         await FoodmapApi.markWishlistEaten(item.id);
@@ -117,7 +119,7 @@ class _WishlistPageState extends State<WishlistPage> {
     }
   }
 
-  Future<void> _delete(WishlistItem item) async {
+  Future<bool> _confirmDelete(WishlistItem item) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -131,7 +133,11 @@ class _WishlistPageState extends State<WishlistPage> {
         ],
       ),
     );
-    if (confirm != true) return;
+    return confirm == true;
+  }
+
+  Future<void> _delete(WishlistItem item) async {
+    if (!await _confirmDelete(item)) return;
     try {
       await FoodmapApi.deleteWishlist(item.id);
       _load();

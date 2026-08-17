@@ -34,10 +34,28 @@ class _DishPageState extends State<DishPage> {
     await DishService.toggleFavorite(widget.dish);
     if (!mounted) return;
     setState(() => _isFavorite = !_isFavorite);
+    if (_isFavorite) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已收藏，记下这道菜啦'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+    // 取消收藏：提供撤销入口，避免误触后无法找回
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isFavorite ? '已收藏，记下这道菜啦' : '已取消收藏'),
-        duration: const Duration(seconds: 1),
+        content: Text('已取消收藏'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () async {
+            await DishService.toggleFavorite(widget.dish);
+            if (!mounted) return;
+            setState(() => _isFavorite = true);
+          },
+        ),
       ),
     );
   }

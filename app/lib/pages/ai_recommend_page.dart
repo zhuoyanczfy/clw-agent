@@ -531,8 +531,8 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
-                      width: 56,
-                      height: 56,
+                      width: 72,
+                      height: 72,
                       child: CachedNetworkImage(
                         imageUrl: image,
                         fit: BoxFit.cover,
@@ -718,12 +718,11 @@ class _AiRecommendPageState extends State<AiRecommendPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 门店图（无图时优雅占位）
+            // 门店图（无图时优雅占位），16:10 展示更完整
             Stack(
               children: [
-                SizedBox(
-                  height: 74,
-                  width: double.infinity,
+                AspectRatio(
+                  aspectRatio: 16 / 10,
                   child: image.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: image,
