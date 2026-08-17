@@ -1100,7 +1100,7 @@ def api_chat(request):
 # 配置默认值：Admin 添加同名 AppConfig 条目即覆盖（APP 启动自动拉取，无需重打包）
 APP_CONFIG_DEFAULTS = {
     # 专属信息
-    'her_name': '陈隶文',
+    'her_name': '隶文',
     'meet_date': '2026-07-23',
     'greeting': '今天也要好好吃饭呀',
     'daily_dish_title': '今天想带你吃',
