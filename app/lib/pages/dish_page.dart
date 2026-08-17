@@ -36,7 +36,7 @@ class _DishPageState extends State<DishPage> {
     setState(() => _isFavorite = !_isFavorite);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isFavorite ? '已收藏，下次约会就去吃它' : '已取消收藏'),
+        content: Text(_isFavorite ? '已收藏，记下这道菜啦' : '已取消收藏'),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -259,7 +259,7 @@ class _DishPageState extends State<DishPage> {
                           _isFavorite ? Icons.star : Icons.star_border,
                           size: 18,
                         ),
-                        label: Text(_isFavorite ? '已收藏，记下这道想吃的' : '收藏，下次一起去吃'),
+                        label: Text(_isFavorite ? '已收藏，记下这道菜' : '收藏，改天做给你吃'),
                       ),
                     ),
                   ],
