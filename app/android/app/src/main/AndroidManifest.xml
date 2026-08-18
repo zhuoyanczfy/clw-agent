@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <!-- 手机重启后恢复定时提醒 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- APP 内更新：允许安装下载的 APK（用户需在系统设置确认） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
         android:label="光旅之盘"
@@ -53,6 +55,16 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
         </receiver>
+        <!-- APP 内更新：把下载的 APK 通过 FileProvider 暴露给系统安装器 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.gift.dailycare.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

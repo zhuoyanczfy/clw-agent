@@ -60,6 +60,13 @@ class RemoteConfig {
   static const kWeatherTitle = 'weather_title';
   static const kWeatherRainBody = 'weather_rain_body';
   static const kWeatherColdBody = 'weather_cold_body';
+  // APP 内更新（与 backend/foodmap/views.py 的 APP_CONFIG_DEFAULTS 对齐）
+  static const kAppVersionCode = 'app_version_code';
+  static const kAppVersionName = 'app_version_name';
+  static const kAppUpdateNote = 'app_update_note';
+  static const kAppApkArm64 = 'app_apk_arm64';
+  static const kAppApkArmeabi = 'app_apk_armeabi';
+  static const kAppApkX86_64 = 'app_apk_x86_64';
 
   static Map<String, String> _values = const {};
   static bool _loaded = false;
@@ -232,4 +239,27 @@ class RemoteConfig {
       get(kWeatherRainBody, fallback: '今天{dayWeather}，出门记得带伞 ⭐');
   static String get weatherColdBody =>
       get(kWeatherColdBody, fallback: '今天降温到 {dayTemp}°，记得多穿一点 ⭐');
+
+  // ---------- APP 内更新配置 ----------
+
+  /// 云端最新版本号（versionCode），未配置时视为 1
+  static int get appVersionCode =>
+      int.tryParse(get(kAppVersionCode)) ?? 1;
+
+  /// 云端最新版本名（如 1.0.1），仅展示用
+  static String get appVersionName => get(kAppVersionName, fallback: '');
+
+  /// 更新说明（换行分隔，弹窗里展示）
+  static String get appUpdateNote => get(kAppUpdateNote, fallback: '');
+
+  /// 按设备 ABI 选择对应的 APK 下载地址（默认 arm64）
+  static String appApkUrl(String abi) {
+    final abiKey = switch (abi) {
+      'arm64-v8a' => kAppApkArm64,
+      'armeabi-v7a' => kAppApkArmeabi,
+      'x86_64' => kAppApkX86_64,
+      _ => kAppApkArm64,
+    };
+    return get(abiKey);
+  }
 }

@@ -6,6 +6,7 @@ import 'pages/footprint_page.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/splash_page.dart';
+import 'services/app_updater.dart';
 import 'services/notification_service.dart';
 import 'services/quote_push_service.dart';
 import 'services/remote_config.dart';
@@ -77,6 +78,64 @@ class _RootState extends State<_Root> {
     } catch (_) {
       // 好句推送调度失败不影响使用
     }
+    // APP 内更新检查：云端版本号更高时弹窗提示（自动下载安装）
+    _checkForUpdate();
+  }
+
+  /// 启动后检查新版本，有更新时弹窗（等加载页结束、主界面出现后再弹）
+  Future<void> _checkForUpdate() async {
+    var waited = 0;
+    while (!_splashDone && waited < 50) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      waited++;
+    }
+    if (!mounted) return;
+    try {
+      final update = await AppUpdater.checkForUpdate();
+      if (update == null || !mounted) return;
+      await _showUpdateDialog(update);
+    } catch (_) {
+      // 更新检查失败不影响使用
+    }
+  }
+
+  /// 更新弹窗：展示版本说明，用户确认后开始下载安装
+  Future<void> _showUpdateDialog(UpdateInfo update) async {
+    final go = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.system_update_alt, color: AppTheme.primaryDark),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('发现新版本 v${update.versionName}'),
+            ),
+          ],
+        ),
+        content: Text(
+          update.note.isEmpty ? '修复问题并优化体验，建议尽快更新～' : update.note,
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('稍后再说'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('立即更新'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DownloadDialog(url: update.apkUrl),
+    );
   }
 
   @override
@@ -153,6 +212,102 @@ class _MainShellState extends State<MainShell> {
       selected: _index == index,
       icon: Icon(icon),
       selectedIcon: Icon(selectedIcon, color: AppTheme.primaryDark),
+    );
+  }
+}
+
+/// 更新下载进度弹窗：下载完成后自动触发系统安装器
+class _DownloadDialog extends StatefulWidget {
+  final String url;
+  const _DownloadDialog({required this.url});
+
+  @override
+  State<_DownloadDialog> createState() => _DownloadDialogState();
+}
+
+class _DownloadDialogState extends State<_DownloadDialog> {
+  double _progress = 0;
+  String _status = '正在下载更新…';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    setState(() {
+      _progress = 0;
+      _status = '正在下载更新…';
+      _error = null;
+    });
+    try {
+      final path = await AppUpdater.download(
+        widget.url,
+        onProgress: (p) {
+          if (!mounted) return;
+          setState(() {
+            _progress = p;
+            _status = '已下载 ${(p * 100).toStringAsFixed(0)}%';
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() => _status = '准备安装…');
+      await AppUpdater.install(path);
+      if (mounted) Navigator.of(context).pop(); // 安装器接管，关掉弹窗
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _status = '下载失败';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.downloading, color: AppTheme.primaryDark),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('正在更新')),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(_status, style: const TextStyle(height: 1.5)),
+          const SizedBox(height: 12),
+          if (_error == null) ...[
+            LinearProgressIndicator(value: _progress, minHeight: 8),
+            const SizedBox(height: 8),
+            Text(
+              '${(_progress * 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (_error != null)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          )
+        else
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('后台下载'),
+          ),
+      ],
     );
   }
 }

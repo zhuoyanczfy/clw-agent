@@ -1125,6 +1125,13 @@ APP_CONFIG_DEFAULTS = {
     'weather_title': '今日天气关怀',
     'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
     'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
+    # APP 内更新（version_code 为整数，发布新版时改这里/AppConfig 表覆盖）
+    'app_version_code': '2',
+    'app_version_name': '1.0.1',
+    'app_update_note': '',
+    'app_apk_arm64': 'http://139.196.27.224/download/app-arm64-v8a-release.apk',
+    'app_apk_armeabi': 'http://139.196.27.224/download/app-armeabi-v7a-release.apk',
+    'app_apk_x86_64': 'http://139.196.27.224/download/app-x86_64-release.apk',
 }
 
 
