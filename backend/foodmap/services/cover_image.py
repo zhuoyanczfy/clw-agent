@@ -27,14 +27,15 @@ def _api_key():
     return parser['default'].get('PIXABAY_API_KEY', '').strip()
 
 
-def fetch_cover_url(keyword, width=800, height=600):
+def fetch_cover_url(keyword, exclude=None):
     """按关键词随机取一张横版图，返回 Pixabay 直链；未配置或失败返回空串。
-    
+
+    keyword: 搜索关键词；exclude: 最近已用过的图片 URL 集合（去重，避免重复出图）。
     Pixabay 支持中文关键词，图片质量高且免费额度充足。
     只在以下场景调用：
     - 每日好句首次生成（当天第一次请求）
     - 再来一条（每次请求新随机句子）
-    
+
     历史好句直接返回 DB 中缓存的 image_url，不会调用此函数。
     """
     key = _api_key()
@@ -48,7 +49,8 @@ def fetch_cover_url(keyword, width=800, height=600):
                 'q': keyword or '风景',
                 'image_type': 'photo',
                 'orientation': 'horizontal',
-                'per_page': 3,
+                # 单页多取几张再随机，避免每次都在同一小批图里打转
+                'per_page': 30,
                 'lang': 'zh',
             },
             timeout=10,
@@ -58,9 +60,11 @@ def fetch_cover_url(keyword, width=800, height=600):
         hits = data.get('hits') or []
         if not hits:
             return ''
+        exclude = exclude or set()
+        # 优先从未用过的图里随机选；偶尔全部撞车时退而随机选一张（低概率）
+        pool = [h for h in hits if h.get('largeImageURL') not in exclude] or hits
         # largeImageURL: 1920px 宽，适合缩放到 800x600
-        # 从返回的 3 张图中随机选一张
-        image_url = random.choice(hits).get('largeImageURL') or ''
+        image_url = random.choice(pool).get('largeImageURL') or ''
     except (requests.RequestException, ValueError):
         return ''
     return image_url

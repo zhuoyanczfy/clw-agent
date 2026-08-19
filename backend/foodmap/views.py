@@ -1526,6 +1526,10 @@ def api_quote_today(request):
     并发下用 select_for_update 串行化首次生成，避免重复调用外部付费/限频 API。
     """
     today = timezone.localdate().isoformat()
+    # 最近 14 天已用配图集合：新图避开，降低重复率
+    since = timezone.localdate() - datetime.timedelta(days=14)
+    used = set(Quote.objects.filter(date__gte=since).exclude(image_url='')
+               .values_list('image_url', flat=True))
     with transaction.atomic():
         cached = Quote.objects.select_for_update().filter(date=today).first()
         if cached and cached.image_url:
@@ -1534,7 +1538,7 @@ def api_quote_today(request):
         if cached:
             # 已有句子但缺配图：用落库的关键词重试补图，成功则更新返回，失败仍返回原缓存
             from .services.cover_image import fetch_cover_url
-            image_url = fetch_cover_url(cached.image_keyword)
+            image_url = fetch_cover_url(cached.image_keyword, exclude=used)
             if image_url:
                 cached.image_url = image_url
                 cached.save(update_fields=['image_url'])
@@ -1548,7 +1552,7 @@ def api_quote_today(request):
 
         # Pixabay 配图：一次性取好落库，避免历史列表重复请求（免费额度 100 次/小时）
         from .services.cover_image import fetch_cover_url
-        image_url = fetch_cover_url(item['image_keyword'])
+        image_url = fetch_cover_url(item['image_keyword'], exclude=used)
 
         obj, _ = Quote.objects.update_or_create(
             date=today,
@@ -1579,17 +1583,23 @@ def api_quote_history(request):
 @require_api_token
 def api_quote_random(request):
     """再来一条：实时从 hitokoto.cn 拉取，不缓存、不计数、不限制。
-    每次请求新随机句子，需配新图（必要调用）；配图失败时回退到最近一张历史配图，
+    每次请求新随机句子，需配新图（必要调用）；配图失败时随机回退一张历史配图，
     再不行用默认意境图，保证前端不出现占位图。"""
     from .data.quotes import fetch_hitokoto
     item = fetch_hitokoto()
     if not item:
         return JsonResponse({'error': '好句数据源暂时不可用，请稍后再试'}, status=503)
     from .services.cover_image import DEFAULT_IMAGE_URL, fetch_cover_url
-    image_url = fetch_cover_url(item['image_keyword'])
+    # 最近 14 天已用配图集合：新图避开，降低重复率
+    since = timezone.localdate() - datetime.timedelta(days=14)
+    used = set(Quote.objects.filter(date__gte=since).exclude(image_url='')
+               .values_list('image_url', flat=True))
+    image_url = fetch_cover_url(item['image_keyword'], exclude=used)
     if not image_url:
-        fallback = Quote.objects.exclude(image_url='').order_by('-date').values_list('image_url', flat=True).first()
-        image_url = fallback or DEFAULT_IMAGE_URL
+        # 回退：随机选一张近期历史配图（不固定最新一张，避免反复出现同一张）
+        history = list(Quote.objects.exclude(image_url='').order_by('-date')
+                       .values_list('image_url', flat=True)[:30])
+        image_url = random.choice(history) if history else DEFAULT_IMAGE_URL
     return JsonResponse({
         'text': item['text'],
         'author': item['author'],
