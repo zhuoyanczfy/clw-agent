@@ -4,9 +4,11 @@ import configparser
 import datetime
 import hashlib
 import json
+import logging
 import os
 import random
 import re
+import time
 from pathlib import Path
 
 from django import forms
@@ -39,9 +41,35 @@ from .models import (
     WishlistItem,
 )
 from .services.agent import build_system_prompt, execute_tool_calls
+from .services import amap
 from .services.llm import LLMError, chat, chat_stream, chat_tool_round
 from .services.profile import build_taste_profile
 from .services.tools.registry import tools_schema
+from .services.tools.restaurant_tools import search_amap_online
+
+logger = logging.getLogger(__name__)
+
+# 高德在线搜索负缓存：{q|district: 最近查询时间}。
+# 本地库与高德都无结果的词，TTL 内不再重复调高德（防反复搜冷门词烧配额）；
+# 多 worker 下各自持一份缓存，效果打折但不失效。
+_AMAP_NEG_CACHE = {}
+_AMAP_NEG_TTL = 300  # 秒
+_AMAP_NEG_MAX = 500
+
+
+def _amap_neg_hit(key):
+    """TTL 内命中负缓存返回 True（直接给空结果，不再调高德）。"""
+    last = _AMAP_NEG_CACHE.get(key)
+    return last is not None and time.time() - last < _AMAP_NEG_TTL
+
+
+def _amap_neg_set(key):
+    _AMAP_NEG_CACHE[key] = time.time()
+    if len(_AMAP_NEG_CACHE) > _AMAP_NEG_MAX:  # 防膨胀：顺带清理过期项
+        expired = [k for k, v in _AMAP_NEG_CACHE.items()
+                   if time.time() - v >= _AMAP_NEG_TTL]
+        for k in expired:
+            _AMAP_NEG_CACHE.pop(k, None)
 
 GEOJSON_PATH = Path(__file__).parent / 'geodata' / 'nanjing_districts.json'
 
@@ -324,6 +352,7 @@ def api_restaurants(request):
 
     ?district=区名 过滤；?visited=1 只看去过（地图标记用）；
     ?q=关键词 按名称模糊搜索（带 q 时最多返回 50 条，供记录页选餐厅用）。
+    本地库无匹配时自动转高德在线搜索并落库（结果带坐标，下次本地可查）。
     """
     qs = Restaurant.objects.select_related('district').annotate(rec_count=Count('records'))
     district = request.GET.get('district')
@@ -335,6 +364,22 @@ def api_restaurants(request):
         qs = qs.filter(district__name=district)
     if visited:
         qs = qs.filter(rec_count__gt=0)
+    if q and not qs.exists():
+        # 本地库无匹配：实时查高德并落库（与推荐官一致），按相关性排序返回；
+        # 高德也无结果的词写入负缓存，短时间内不再重复查询。
+        neg_key = f'{q}|{district or ""}'
+        if _amap_neg_hit(neg_key):
+            return JsonResponse({'restaurants': []})
+        online = search_amap_online(q, district)
+        if not online:
+            _amap_neg_set(neg_key)
+            return JsonResponse({'restaurants': []})
+        ids = [r.pk for r in online]
+        rows = Restaurant.objects.select_related('district').annotate(
+            rec_count=Count('records')).filter(pk__in=ids)
+        order = {pk: i for i, pk in enumerate(ids)}
+        rows = sorted(rows, key=lambda r: order.get(r.pk, 999))
+        return JsonResponse({'restaurants': [_restaurant_json(r) for r in rows]})
     qs = qs.order_by('-rec_count', '-rating', 'name')
     if q:
         qs = qs[:50]
@@ -380,6 +425,45 @@ def _record_json(record, with_photos=True):
     return data
 
 
+def _fill_new_restaurant_location(restaurant):
+    """手填新餐厅后静默调高德补位置（地址/坐标/评分）。
+
+    优先取与所选区一致的 POI，否则取相关性最高的第一家；
+    不写 amap_id（该字段唯一，搜到的 POI 可能已在库中，避免冲突）；
+    高德不可用时静默降级（餐厅照常创建，仅无坐标，地图上不显示）。
+    """
+    try:
+        pois = amap.search_text(restaurant.name, city='南京')
+    except amap.AMAPError as exc:
+        logger.warning('新餐厅 %s 补位置失败: %s', restaurant.name, exc)
+        return
+    matched = next((p for p in pois if (p.get('adname') or '') == restaurant.district.name), None)
+    if matched is None and pois:
+        matched = pois[0]
+    if not matched:
+        return
+    lat = lng = None
+    location = matched.get('location', '')
+    if location:
+        try:
+            lng, lat = (float(x) for x in location.split(','))
+        except ValueError:
+            pass
+        else:
+            lng, lat = amap.gcj02_to_wgs84(lng, lat)
+    rating = None
+    try:
+        rating = float((matched.get('biz_ext') or {}).get('rating'))
+    except (TypeError, ValueError):
+        pass
+    restaurant.address = (matched.get('address') or '').strip()[:200]
+    restaurant.lat = lat
+    restaurant.lng = lng
+    restaurant.rating = rating
+    restaurant.save(update_fields=['address', 'lat', 'lng', 'rating'])
+    logger.info('新餐厅 %s 已补位置: %s', restaurant.name, matched.get('address'))
+
+
 def _record_from_data(data, record=None):
     """从 JSON body 组装/更新记录：支持选已有餐厅或新建餐厅（restaurant_name + district_id）。"""
     fields = {}
@@ -397,6 +481,7 @@ def _record_from_data(data, record=None):
         if not district:
             raise ValueError('新餐厅必须选择所属区')
         fields['restaurant'] = Restaurant.objects.create(name=name, district=district)
+        _fill_new_restaurant_location(fields['restaurant'])
 
     for key in ('rating', 'per_capita'):
         value = data.get(key, 4 if key == 'rating' else None)
@@ -1126,9 +1211,9 @@ APP_CONFIG_DEFAULTS = {
     'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
     'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
     # APP 内更新（version_code 为整数，发布新版时改这里/AppConfig 表覆盖）
-    'app_version_code': '2',
-    'app_version_name': '1.0.1',
-    'app_update_note': '',
+    'app_version_code': '4',
+    'app_version_name': '1.0.3',
+    'app_update_note': '新增：搜索餐厅时本地没有会自动实时查高德地图，结果自动保存下次可直接搜到；手填新餐厅自动补充地址与地图位置',
     'app_apk_arm64': 'http://139.196.27.224/download/app-arm64-v8a-release.apk',
     'app_apk_armeabi': 'http://139.196.27.224/download/app-armeabi-v7a-release.apk',
     'app_apk_x86_64': 'http://139.196.27.224/download/app-x86_64-release.apk',

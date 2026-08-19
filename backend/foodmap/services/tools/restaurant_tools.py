@@ -175,16 +175,17 @@ def _save_amap_poi(poi):
         return None
 
 
-def _search_amap(keyword, district=''):
-    """本地库无匹配时的兜底：高德在线搜索并落库，返回统一格式 JSON 字符串。
+def search_amap_online(keyword, district=''):
+    """高德在线搜索餐厅并落库（记录页搜索/新建餐厅兜底用），返回 Restaurant 列表。
 
-    高德失败静默降级返回空数组 []（调用方应诚实告知用户）。
+    本地库无匹配时实时查高德；结果写入本地库（含坐标/地址/POI ID/评分），
+    下次本地即可命中，无需再调高德。高德失败静默返回 []，不阻塞调用方。
     """
     try:
         pois = amap.search_text(keyword, city='南京')
     except amap.AMAPError as exc:
-        logger.warning('高德兜底搜索 %s 失败: %s', keyword, exc)
-        return '[]'
+        logger.warning('高德在线搜索 %s 失败: %s', keyword, exc)
+        return []
     results = []
     for poi in pois:
         if len(results) >= AMAP_FALLBACK_LIMIT:
@@ -193,9 +194,18 @@ def _search_amap(keyword, district=''):
             continue
         r = _save_amap_poi(poi)
         if r is not None:
-            results.append(_to_result(r))
-    logger.info('高德兜底搜索 %s（区=%s）：返回 %d 家', keyword, district or '-', len(results))
-    return json.dumps(results, ensure_ascii=False)
+            results.append(r)
+    logger.info('高德在线搜索 %s（区=%s）：落库 %d 家', keyword, district or '-', len(results))
+    return results
+
+
+def _search_amap(keyword, district=''):
+    """本地库无匹配时的兜底：高德在线搜索并落库，返回统一格式 JSON 字符串。
+
+    高德失败静默降级返回空数组 []（调用方应诚实告知用户）。
+    """
+    results = search_amap_online(keyword, district)
+    return json.dumps([_to_result(r) for r in results], ensure_ascii=False)
 
 
 def search_restaurants(keyword: str, district: str = '') -> str:

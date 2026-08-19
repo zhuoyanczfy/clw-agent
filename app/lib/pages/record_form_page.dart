@@ -286,7 +286,9 @@ class _RecordFormPageState extends State<RecordFormPage> {
                     child: Column(
                       children: [
                         RadioGroup<int>(
-                          groupValue: _createNew ? 0 : 1,
+                          // groupValue 与 RadioListTile 的 value 对齐：
+                          // 0=从已有餐厅里选，1=新餐厅录入（此前写反导致高亮与实际逻辑错位）
+                          groupValue: _createNew ? 1 : 0,
                           // 编辑模式：餐厅已定，不允许切换
                           onChanged: (v) {
                             if (_isEdit) return;
@@ -623,7 +625,7 @@ class _RestaurantSearchSheetState extends State<_RestaurantSearchSheet> {
                 autofocus: true,
                 onChanged: _onChanged,
                 decoration: InputDecoration(
-                  hintText: '输入餐厅名关键词（如：火锅）',
+                  hintText: '输入餐厅名关键词，本地没有会实时查高德地图',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: _searchCtrl.text.isNotEmpty
                       ? IconButton(
@@ -651,7 +653,7 @@ class _RestaurantSearchSheetState extends State<_RestaurantSearchSheet> {
                                 child: Text(
                                   widget.initial.isEmpty
                                       ? '输入关键词搜索餐厅'
-                                      : '没有匹配的餐厅，可以选「新餐厅（我来录入）」',
+                                      : '没有找到匹配的餐厅，试试其他关键词，或选「新餐厅（我来录入）」',
                                   style: const TextStyle(color: AppTheme.textLight),
                                 ),
                               ),
@@ -663,7 +665,11 @@ class _RestaurantSearchSheetState extends State<_RestaurantSearchSheet> {
                                 return ListTile(
                                   title: Text(r.name,
                                       overflow: TextOverflow.ellipsis),
-                                  subtitle: Text('${r.district} · 已记录 ${r.recordCount} 次'),
+                                  subtitle: Text([
+                                    r.district,
+                                    if (r.address.isNotEmpty) r.address,
+                                    if (r.recordCount > 0) '已记录 ${r.recordCount} 次',
+                                  ].join(' · ')),
                                   onTap: () => Navigator.pop(context, r),
                                 );
                               },
