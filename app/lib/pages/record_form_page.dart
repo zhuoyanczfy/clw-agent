@@ -126,7 +126,8 @@ class _RecordFormPageState extends State<RecordFormPage> {
   Future<void> _pickPhotos() async {
     if (_isEdit && _saving) return;
     final picker = ImagePicker();
-    final files = await picker.pickMultiImage(limit: 9);
+    // 选图时压缩，避免多张原图超服务器上传限制
+    final files = await picker.pickMultiImage(limit: 9, maxWidth: 1600, imageQuality: 82);
     if (files.isEmpty) return;
     // 直接上传到当前记录（编辑模式）或暂存路径（新建模式，保存时上传）
     final paths = [for (final f in files) f.path];

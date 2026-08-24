@@ -254,7 +254,7 @@ class FoodmapApi {
     for (final path in filePaths) {
       request.files.add(await http.MultipartFile.fromPath('photos', path));
     }
-    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final streamed = await request.send().timeout(const Duration(seconds: 120));
     final resp = await http.Response.fromStream(streamed);
     if (resp.statusCode >= 300) _throw(resp);
     final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
@@ -438,7 +438,7 @@ class FoodmapApi {
     for (final path in filePaths) {
       request.files.add(await http.MultipartFile.fromPath('images', path));
     }
-    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final streamed = await request.send().timeout(const Duration(seconds: 120));
     final resp = await http.Response.fromStream(streamed);
     if (resp.statusCode >= 300) _throw(resp);
     final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;

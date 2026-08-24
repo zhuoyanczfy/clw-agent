@@ -79,7 +79,12 @@ class _PetPageState extends State<PetPage> {
 
   Future<void> _pickAndUploadPhotos() async {
     if (_uploading || _pet == null) return;
-    final files = await ImagePicker().pickMultiImage(limit: 9);
+    // 选图时压缩（手机原图 3-8M/张，多张易超服务器上传限制，压缩后每张约 200-400KB）
+    final files = await ImagePicker().pickMultiImage(
+      limit: 9,
+      maxWidth: 1600,
+      imageQuality: 82,
+    );
     if (files.isEmpty) return;
     setState(() => _uploading = true);
     try {
