@@ -586,16 +586,23 @@ def api_photo_upload(request, record_id):
     """上传用餐照片（multipart，字段名 photos，可多张）。"""
     record = get_object_or_404(DiningRecord, pk=record_id)
     photo_field = forms.ImageField()
-    saved = []
-    for f in request.FILES.getlist('photos'):
+    files = request.FILES.getlist('photos')
+    # 先全部校验，再统一入库（事务保证要么全成功要么全失败）
+    for f in files:
         if f.size > 5 * 1024 * 1024:
             return JsonResponse({'error': f'照片「{f.name}」超过 5MB，请压缩后再传'}, status=400)
-        try:
-            photo_field.clean(f)
-        except forms.ValidationError as exc:
-            return JsonResponse({'error': f'照片「{f.name}」无效：{exc}'}, status=400)
-        photo = DiningRecordPhoto.objects.create(record=record, image=f)
-        saved.append(_photo_json(photo))
+        err = _clean_image(photo_field, f, '照片')
+        if err:
+            return JsonResponse({'error': err}, status=400)
+    try:
+        with transaction.atomic():
+            saved = [
+                _photo_json(DiningRecordPhoto.objects.create(record=record, image=f))
+                for f in files
+            ]
+    except Exception as exc:
+        logger.exception('用餐照片上传失败')
+        return JsonResponse({'error': f'照片保存失败：{exc}'}, status=500)
     return JsonResponse({'ok': True, 'photos': saved})
 
 
@@ -767,6 +774,11 @@ def _clean_image(field, f, label):
         field.clean(f)
     except forms.ValidationError as exc:
         return f'{label}「{f.name}」无效：{exc}'
+    except Exception as exc:
+        # Pillow 对损坏/特殊格式（如 HEIC、坏 JPEG）可能抛非 ValidationError，
+        # 不兜住会变成 500
+        logger.warning('图片校验异常 %s: %s', f.name, exc)
+        return f'{label}「{f.name}」无法识别，请换一张或先转成 JPG'
     return None
 
 
@@ -858,14 +870,24 @@ def api_pet_photos(request, pet_id):
 
     photo_field = forms.ImageField()
     caption = (request.POST.get('caption') or '').strip()[:100]
-    saved = []
-    for f in request.FILES.getlist('images'):
+    files = request.FILES.getlist('images')
+    if not files:
+        return JsonResponse({'error': '缺少图片字段 images'}, status=400)
+    # 先全部校验，再统一入库（事务保证要么全成功要么全失败，避免部分上传后重试出重复照片）
+    for f in files:
         err = _clean_image(photo_field, f, '照片')
         if err:
             return JsonResponse({'error': err}, status=400)
-        saved.append(PetPhoto.objects.create(pet=pet, image=f, caption=caption))
-    if not saved:
-        return JsonResponse({'error': '缺少图片字段 images'}, status=400)
+    try:
+        with transaction.atomic():
+            saved = [
+                PetPhoto.objects.create(pet=pet, image=f, caption=caption)
+                for f in files
+            ]
+    except Exception as exc:
+        # 把真实原因（权限/磁盘/DB 等）带回前端，便于免登服务器定位
+        logger.exception('宠物照片上传失败')
+        return JsonResponse({'error': f'照片保存失败：{exc}'}, status=500)
     return JsonResponse(
         {'ok': True, 'photos': [_pet_photo_json(p) for p in saved]}, status=201
     )
