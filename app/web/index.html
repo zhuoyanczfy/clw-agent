@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    部署在服务器 /web/ 子路径下，构建时用 --base-href /web/ 替换。
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="光旅之盘——专属美食足迹与每日关怀">
+  <!-- 移动端全屏体验：禁止缩放 + 刘海屏安全区 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+
+  <!-- iOS：添加到主屏幕后全屏运行、自带 APP 名与图标 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="光旅之盘">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Android Chrome 地址栏/任务切换器配色 -->
+  <meta name="theme-color" content="#FFB300">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>光旅之盘</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

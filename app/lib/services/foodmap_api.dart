@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -30,6 +31,19 @@ class FoodmapApi {
   static Future<String> _base() async => ApiConfig.getBaseUrl();
 
   static Uri _uri(String base, String path) => Uri.parse('$base$path');
+
+  /// multipart 文件项：读字节上传（fromPath 依赖 dart:io，Web 上不可用；
+  /// Web 端 XFile.path 是 blob: URL，但 readAsBytes 两端都可用）。
+  /// 文件名无扩展名时补 .jpg（后端 ImageField 按扩展名校验）。
+  static Future<http.MultipartFile> _filePart(String field, XFile file) async {
+    var name = file.name;
+    if (!name.contains('.')) name = '$name.jpg';
+    return http.MultipartFile.fromBytes(
+      field,
+      await file.readAsBytes(),
+      filename: name,
+    );
+  }
 
   static Never _throw(http.Response resp) {
     String msg = '请求失败(${resp.statusCode})';
@@ -246,13 +260,13 @@ class FoodmapApi {
   static Future<void> deleteRecord(int id) => _deleteJson('/api/records/$id/');
 
   /// 上传照片（multipart），返回新增照片列表
-  static Future<List<RecordPhoto>> uploadPhotos(int recordId, List<String> filePaths) async {
+  static Future<List<RecordPhoto>> uploadPhotos(int recordId, List<XFile> photos) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
     final request = http.MultipartRequest('POST', _uri(base, '/api/records/$recordId/photos/'))
       ..headers['X-Api-Token'] = AppConfig.apiToken;
-    for (final path in filePaths) {
-      request.files.add(await http.MultipartFile.fromPath('photos', path));
+    for (final photo in photos) {
+      request.files.add(await _filePart('photos', photo));
     }
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final resp = await http.Response.fromStream(streamed);
@@ -361,7 +375,7 @@ class FoodmapApi {
     String birthday = '',
     String adoptDate = '',
     String notes = '',
-    String? avatarPath,
+    XFile? avatar,
   }) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
@@ -373,8 +387,8 @@ class FoodmapApi {
       ..fields['birthday'] = birthday
       ..fields['adopt_date'] = adoptDate
       ..fields['notes'] = notes;
-    if (avatarPath != null) {
-      request.files.add(await http.MultipartFile.fromPath('avatar', avatarPath));
+    if (avatar != null) {
+      request.files.add(await _filePart('avatar', avatar));
     }
     final streamed = await request.send().timeout(const Duration(seconds: 60));
     final resp = await http.Response.fromStream(streamed);
@@ -383,7 +397,7 @@ class FoodmapApi {
     return Pet.fromJson(json['pet'] as Map<String, dynamic>);
   }
 
-  /// 更新宠物档案（multipart 全字段；avatarPath 传 null 表示不换头像）
+  /// 更新宠物档案（multipart 全字段；avatar 传 null 表示不换头像）
   static Future<Pet> updatePet(
     int id, {
     required String name,
@@ -392,7 +406,7 @@ class FoodmapApi {
     String birthday = '',
     String adoptDate = '',
     String notes = '',
-    String? avatarPath,
+    XFile? avatar,
   }) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
@@ -404,8 +418,8 @@ class FoodmapApi {
       ..fields['birthday'] = birthday
       ..fields['adopt_date'] = adoptDate
       ..fields['notes'] = notes;
-    if (avatarPath != null) {
-      request.files.add(await http.MultipartFile.fromPath('avatar', avatarPath));
+    if (avatar != null) {
+      request.files.add(await _filePart('avatar', avatar));
     }
     final streamed = await request.send().timeout(const Duration(seconds: 60));
     final resp = await http.Response.fromStream(streamed);
@@ -427,7 +441,7 @@ class FoodmapApi {
   /// 上传宠物照片（multipart，可多张，caption 可选）
   static Future<List<PetPhoto>> uploadPetPhotos(
     int petId,
-    List<String> filePaths, {
+    List<XFile> photos, {
     String caption = '',
   }) async {
     final base = await _base();
@@ -435,8 +449,8 @@ class FoodmapApi {
     final request = http.MultipartRequest('POST', _uri(base, '/api/pets/$petId/photos/'))
       ..headers['X-Api-Token'] = AppConfig.apiToken
       ..fields['caption'] = caption;
-    for (final path in filePaths) {
-      request.files.add(await http.MultipartFile.fromPath('images', path));
+    for (final photo in photos) {
+      request.files.add(await _filePart('images', photo));
     }
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final resp = await http.Response.fromStream(streamed);

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -7,6 +5,7 @@ import '../models/pet.dart';
 import '../services/foodmap_api.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
+import '../widgets/local_image.dart';
 
 /// 宠物档案表单：创建（pet 为 null）或编辑。
 class PetFormPage extends StatefulWidget {
@@ -25,7 +24,7 @@ class _PetFormPageState extends State<PetFormPage> {
   String _gender = '';
   String _birthday = '';
   String _adoptDate = '';
-  String? _avatarPath; // 新选择的头像本地路径（null = 不换）
+  XFile? _avatarFile; // 新选择的头像（null = 不换）
   bool _saving = false;
 
   bool get _isEdit => widget.pet != null;
@@ -77,7 +76,7 @@ class _PetFormPageState extends State<PetFormPage> {
       maxWidth: 1200,
       imageQuality: 85,
     );
-    if (file != null) setState(() => _avatarPath = file.path);
+    if (file != null) setState(() => _avatarFile = file);
   }
 
   Future<void> _save() async {
@@ -99,7 +98,7 @@ class _PetFormPageState extends State<PetFormPage> {
           birthday: _birthday,
           adoptDate: _adoptDate,
           notes: _notes.text.trim(),
-          avatarPath: _avatarPath,
+          avatar: _avatarFile,
         );
       } else {
         await FoodmapApi.createPet(
@@ -109,7 +108,7 @@ class _PetFormPageState extends State<PetFormPage> {
           birthday: _birthday,
           adoptDate: _adoptDate,
           notes: _notes.text.trim(),
-          avatarPath: _avatarPath,
+          avatar: _avatarFile,
         );
       }
       if (!mounted) return;
@@ -156,9 +155,9 @@ class _PetFormPageState extends State<PetFormPage> {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: _avatarPath != null
-                      ? Image.file(
-                          File(_avatarPath!),
+                  child: _avatarFile != null
+                      ? Image(
+                          image: localImageProvider(_avatarFile!),
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => _avatarEmpty(),
                         )

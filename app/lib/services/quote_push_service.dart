@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -24,6 +25,7 @@ class QuotePushService {
   /// 注意：通知为单次推送（不带每日重复），内容每天由启动时的重新调度更新；
   /// 若某天未打开 APP 则不推送，避免弹出旧句子。
   static Future<void> scheduleToday() async {
+    if (kIsWeb) return; // Web 无系统级通知调度
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().substring(0, 10);
 

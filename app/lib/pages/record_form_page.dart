@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../models/district.dart';
 import '../models/restaurant.dart';
 import '../services/foodmap_api.dart';
 import '../theme.dart';
+import '../widgets/local_image.dart';
 
 /// 新建/编辑用餐记录。
 /// - 新建：传 [restaurant]（已选定餐厅）或留空（页面内选择餐厅/新建餐厅）
@@ -44,7 +44,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
       _isEdit ? [...?widget.record?.photos] : [];
 
   /// 新建模式：暂存的本地照片，保存时统一上传
-  final List<String> _pendingPhotoPaths = [];
+  final List<XFile> _pendingPhotos = [];
 
   int? _selectedRestaurantId; // 选择已有餐厅
   int? _selectedNewDistrictId; // 新建餐厅的区
@@ -129,11 +129,10 @@ class _RecordFormPageState extends State<RecordFormPage> {
     // 选图时压缩，避免多张原图超服务器上传限制
     final files = await picker.pickMultiImage(limit: 9, maxWidth: 1600, imageQuality: 82);
     if (files.isEmpty) return;
-    // 直接上传到当前记录（编辑模式）或暂存路径（新建模式，保存时上传）
-    final paths = [for (final f in files) f.path];
+    // 直接上传到当前记录（编辑模式）或暂存（新建模式，保存时上传）
     if (_isEdit) {
       try {
-        final uploaded = await FoodmapApi.uploadPhotos(widget.record!.id, paths);
+        final uploaded = await FoodmapApi.uploadPhotos(widget.record!.id, files);
         if (!mounted) return;
         setState(() => _existingPhotos.addAll(uploaded));
         ScaffoldMessenger.of(context)
@@ -143,7 +142,7 @@ class _RecordFormPageState extends State<RecordFormPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('上传失败：$e')));
       }
     } else {
-      _pendingPhotoPaths.addAll(paths);
+      _pendingPhotos.addAll(files);
       setState(() {});
     }
   }
@@ -250,9 +249,9 @@ class _RecordFormPageState extends State<RecordFormPage> {
       }
 
       // 新建模式：上传暂存照片
-      if (!_isEdit && _pendingPhotoPaths.isNotEmpty) {
+      if (!_isEdit && _pendingPhotos.isNotEmpty) {
         try {
-          await FoodmapApi.uploadPhotos(saved.id, _pendingPhotoPaths);
+          await FoodmapApi.uploadPhotos(saved.id, _pendingPhotos);
         } catch (_) {}
       }
 
@@ -499,20 +498,20 @@ class _RecordFormPageState extends State<RecordFormPage> {
                     ),
                   ],
                   // 新建模式：待上传照片预览，右上角 ✕ 可移除
-                  if (_pendingPhotoPaths.isNotEmpty) ...[
+                  if (_pendingPhotos.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       height: 90,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _pendingPhotoPaths.length,
+                        itemCount: _pendingPhotos.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (context, i) => _photoThumb(
                           key: ValueKey('pending-$i'),
                           onDelete: () =>
-                              setState(() => _pendingPhotoPaths.removeAt(i)),
-                          child: Image.file(
-                            File(_pendingPhotoPaths[i]),
+                              setState(() => _pendingPhotos.removeAt(i)),
+                          child: Image(
+                            image: localImageProvider(_pendingPhotos[i]),
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => Container(
                               color: const Color(0xFFF0EAE4),

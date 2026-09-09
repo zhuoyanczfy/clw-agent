@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'pages/ai_recommend_page.dart';
@@ -10,6 +11,7 @@ import 'services/app_updater.dart';
 import 'services/notification_service.dart';
 import 'services/quote_push_service.dart';
 import 'services/remote_config.dart';
+import 'services/update_installer.dart';
 import 'theme.dart';
 import 'widgets/cute_widgets.dart';
 
@@ -37,7 +39,35 @@ class GiftingApp extends StatelessWidget {
       title: 'Compass of Light & Wanderlust',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      // Web 桌面端：手机布局居中限宽，避免拉伸成宽屏页面
+      builder: (context, child) => _WebFrame(child: child),
       home: showSplash ? const _Root() : const MainShell(),
+    );
+  }
+}
+
+/// Web 桌面端限宽容器：窗口宽 >600 时把 APP 布局限到 480px 居中显示
+/// （手机浏览器不受影响；同步重写 MediaQuery 让页面拿到真实可用宽度）。
+class _WebFrame extends StatelessWidget {
+  final Widget? child;
+  const _WebFrame({this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final content = child;
+    if (content == null || !kIsWeb) return content ?? const SizedBox.shrink();
+    final mq = MediaQuery.of(context);
+    if (mq.size.width <= 600) return content;
+    return Container(
+      color: const Color(0xFFF3E9DA),
+      alignment: Alignment.center,
+      child: MediaQuery(
+        data: mq.copyWith(size: Size(480, mq.size.height)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: content,
+        ),
+      ),
     );
   }
 }
@@ -243,7 +273,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       _error = null;
     });
     try {
-      final path = await AppUpdater.download(
+      final path = await downloadUpdate(
         widget.url,
         onProgress: (p) {
           if (!mounted) return;
@@ -255,7 +285,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       );
       if (!mounted) return;
       setState(() => _status = '准备安装…');
-      await AppUpdater.install(path);
+      await installUpdate(path);
       if (mounted) Navigator.of(context).pop(); // 安装器接管，关掉弹窗
     } catch (e) {
       if (!mounted) return;

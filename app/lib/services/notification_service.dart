@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -13,6 +14,7 @@ import 'weather_service.dart';
 /// 使用 flutter_local_notifications 的原生定时调度，
 /// 关闭 APP 也能收到通知（Android 系统级调度）。
 /// 文案 / 时间 / 开关全部由后台配置（RemoteConfig），APP 内不可手动修改。
+/// Web 版不支持系统级定时通知，全部调度静默跳过。
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -31,6 +33,7 @@ class NotificationService {
 
   /// 初始化插件、时区并请求权限
   static Future<void> init() async {
+    if (kIsWeb) return; // Web 无系统级通知调度
     tzdata.initializeTimeZones();
     // 必须显式指定本地时区：默认 UTC 会导致所有定时提醒比设定时间晚 8 小时触发
     tz.setLocalLocation(tz.getLocation('Asia/Shanghai'));
@@ -48,6 +51,7 @@ class NotificationService {
 
   /// 按云端配置调度所有提醒（先取消旧的，再重新排）
   static Future<void> scheduleAll() async {
+    if (kIsWeb) return;
     await _plugin.cancelAll();
 
     if (RemoteConfig.waterEnabled) {
@@ -134,6 +138,7 @@ class NotificationService {
   /// 调度宠物疫苗/驱虫到期提醒：到期前 7 天上午 10 点单次通知。
   /// 会取消已删除事项的旧提醒；到期日已过或未设到期时间的不调度。
   static Future<void> schedulePetReminders(List<PetEvent> events) async {
+    if (kIsWeb) return;
     final now = tz.TZDateTime.now(tz.local);
     final active = <int>{};
     for (final e in events) {
@@ -180,6 +185,7 @@ class NotificationService {
   /// 重排全部提醒：每日提醒 + 宠物疫苗/驱虫到期提醒。
   /// 设置页改动提醒配置后调用；宠物数据拉取失败不影响每日提醒。
   static Future<void> rescheduleAll() async {
+    if (kIsWeb) return;
     await scheduleAll();
     try {
       final pets = await FoodmapApi.fetchPets();

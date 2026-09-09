@@ -88,14 +88,13 @@ class _PetPageState extends State<PetPage> {
     if (files.isEmpty) return;
     setState(() => _uploading = true);
     try {
-      final paths = [for (final f in files) f.path];
-      await FoodmapApi.uploadPetPhotos(_pet!.id, paths);
+      await FoodmapApi.uploadPetPhotos(_pet!.id, files);
       final photos = await FoodmapApi.fetchPetPhotos(_pet!.id);
       if (!mounted) return;
       setState(() => _photos = photos);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('已上传 ${paths.length} 张照片 🐾')));
+      ).showSnackBar(SnackBar(content: Text('已上传 ${files.length} 张照片 🐾')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
