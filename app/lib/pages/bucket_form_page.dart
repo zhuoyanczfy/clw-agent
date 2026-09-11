@@ -21,6 +21,7 @@ class _BucketFormPageState extends State<BucketFormPage> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
   bool _saving = false;
+  String? _titleError;
 
   @override
   void initState() {
@@ -39,12 +40,14 @@ class _BucketFormPageState extends State<BucketFormPage> {
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('标题不能为空')),
-      );
+      // 直接标红标题框并给出提示：hint 示例文案容易让用户误以为已填写
+      setState(() => _titleError = '写一句想一起做的事吧（灰字只是示例）');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _titleError = null;
+      _saving = true;
+    });
     try {
       final item = widget.item;
       if (item == null) {
@@ -94,10 +97,15 @@ class _BucketFormPageState extends State<BucketFormPage> {
         children: [
           TextField(
             controller: _titleCtrl,
-            decoration: const InputDecoration(
+            onChanged: (_) {
+              // 用户开始输入即清除错误提示
+              if (_titleError != null) setState(() => _titleError = null);
+            },
+            decoration: InputDecoration(
               labelText: '想一起做的事',
-              hintText: '去颐和路踩满地梧桐碎金，接住飘落的秋叶片',
-              border: OutlineInputBorder(),
+              hintText: '例如：去颐和路踩满地梧桐碎金，接住飘落的秋叶片',
+              errorText: _titleError,
+              border: const OutlineInputBorder(),
             ),
             style: const TextStyle(fontSize: 16),
             maxLength: 100,

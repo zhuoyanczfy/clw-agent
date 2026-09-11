@@ -29,13 +29,19 @@ void main() {
     expect(find.text('添加到心愿清单'), findsOneWidget);
   });
 
-  testWidgets('表单页空标题保存应提示', (tester) async {
+  testWidgets('表单页空标题保存应在输入框标红提示', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: BucketFormPage()));
     await tester.pump();
 
     await tester.tap(find.text('添加到心愿清单'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('标题不能为空'), findsOneWidget);
+    // 空标题：输入框标红 + errorText 提示（灰字 hint 易被误认为已填写）
+    expect(find.text('写一句想一起做的事吧（灰字只是示例）'), findsOneWidget);
+
+    // 输入内容后错误提示消失
+    await tester.enterText(find.byType(TextField).first, '去看一次日出');
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('写一句想一起做的事吧（灰字只是示例）'), findsNothing);
   });
 }
