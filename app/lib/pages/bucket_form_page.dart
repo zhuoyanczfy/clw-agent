@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../models/bucket_item.dart';
 import '../services/foodmap_api.dart';
-import '../theme.dart';
+import '../widgets/plant_level.dart';
 
-/// 心愿表单页：新建/编辑想一起做的事。
+/// 种草表单页：新建/编辑想一起做的事。
 ///
 /// 用独立页面而非 AlertDialog——微信等 WKWebView 上 dialog +
 /// 键盘的布局不可靠，页面路由最稳，写文案体验也更好。
@@ -20,6 +20,7 @@ class BucketFormPage extends StatefulWidget {
 class _BucketFormPageState extends State<BucketFormPage> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
+  late int _intensity;
   bool _saving = false;
   String? _titleError;
 
@@ -28,6 +29,7 @@ class _BucketFormPageState extends State<BucketFormPage> {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.item?.title ?? '');
     _descCtrl = TextEditingController(text: widget.item?.description ?? '');
+    _intensity = widget.item?.intensity ?? 1;
   }
 
   @override
@@ -54,12 +56,14 @@ class _BucketFormPageState extends State<BucketFormPage> {
         await FoodmapApi.createBucketItem(
           title: title,
           description: _descCtrl.text.trim(),
+          intensity: _intensity,
         );
       } else {
         await FoodmapApi.updateBucketItem(
           item.id,
           title: title,
           description: _descCtrl.text.trim(),
+          intensity: _intensity,
         );
       }
       if (!mounted) return;
@@ -78,7 +82,7 @@ class _BucketFormPageState extends State<BucketFormPage> {
     final editing = widget.item != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(editing ? '编辑心愿' : '添加心愿'),
+        title: Text(editing ? '编辑' : '种草'),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
@@ -110,7 +114,12 @@ class _BucketFormPageState extends State<BucketFormPage> {
             style: const TextStyle(fontSize: 16),
             maxLength: 100,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          PlantPicker(
+            value: _intensity,
+            onChanged: (v) => setState(() => _intensity = v),
+          ),
+          const SizedBox(height: 20),
           TextField(
             controller: _descCtrl,
             maxLines: 6,
@@ -128,7 +137,7 @@ class _BucketFormPageState extends State<BucketFormPage> {
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            child: Text(_saving ? '保存中…' : (editing ? '保存修改' : '添加到心愿清单')),
+            child: Text(_saving ? '保存中…' : (editing ? '保存修改' : '种下 🌱')),
           ),
         ],
       ),

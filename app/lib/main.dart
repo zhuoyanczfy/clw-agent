@@ -230,8 +230,8 @@ class _MainShellState extends State<MainShell> {
             label: '推荐官',
           ),
           NavigationDestination(
-            icon: _navIcon(4, Icons.favorite_border, Icons.favorite),
-            label: '心愿',
+            icon: _navIcon(4, Icons.eco_outlined, Icons.eco),
+            label: '植物园',
           ),
           NavigationDestination(
             icon: _navIcon(5, Icons.settings_outlined, Icons.settings),

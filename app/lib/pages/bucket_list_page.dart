@@ -1,13 +1,13 @@
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/bucket_item.dart';
 import '../services/foodmap_api.dart';
 import '../theme.dart';
+import '../widgets/plant_level.dart';
 import 'bucket_form_page.dart';
 
-/// 心愿清单：想一起做的事，可标记已体验、附照片和回忆。
+/// 植物园：想一起做的事，可种草/种花/种树分级，拔草（完成）、附照片和手记。
 class BucketListPage extends StatefulWidget {
   const BucketListPage({super.key});
 
@@ -85,7 +85,8 @@ class _BucketListPageState extends State<BucketListPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('删除「${item.title}」？'),
+        title: Text('让「${item.title}」枯萎？'),
+        content: const Text('不想要了，就让 Ta 从植物园里枯萎吧 🥀'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -93,7 +94,7 @@ class _BucketListPageState extends State<BucketListPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除', style: TextStyle(color: Colors.white)),
+            child: const Text('枯萎 🥀', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -113,9 +114,12 @@ class _BucketListPageState extends State<BucketListPage> {
   Widget build(BuildContext context) {
     final pending = _items.where((i) => !i.isCompleted).toList();
     final completed = _items.where((i) => i.isCompleted).toList();
+    // 想实现程度从高到低（树→花→草）；后端已排序，这里再兜底一次
+    pending.sort((a, b) => b.intensity.compareTo(a.intensity));
+    completed.sort((a, b) => b.intensity.compareTo(a.intensity));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('心愿清单'),
+        title: const Text('植物园'),
         actions: [
           IconButton(
             onPressed: _load,
@@ -126,6 +130,7 @@ class _BucketListPageState extends State<BucketListPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addItem,
+        tooltip: '种草',
         child: const Icon(Icons.add),
       ),
       body: _buildBody(pending, completed),
@@ -154,7 +159,7 @@ class _BucketListPageState extends State<BucketListPage> {
             children: [
               Expanded(
                 child: _SegBtn(
-                  label: '待体验（${pending.length}）',
+                  label: '生长中（${pending.length}）',
                   selected: !_showCompleted,
                   onTap: () => setState(() => _showCompleted = false),
                 ),
@@ -162,7 +167,7 @@ class _BucketListPageState extends State<BucketListPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: _SegBtn(
-                  label: '已体验（${completed.length}）',
+                  label: '已拔草（${completed.length}）',
                   selected: _showCompleted,
                   onTap: () => setState(() => _showCompleted = true),
                 ),
@@ -186,14 +191,14 @@ class _BucketListPageState extends State<BucketListPage> {
         children: [
           const SizedBox(height: 80),
           Icon(
-            completedMode ? Icons.celebration_outlined : Icons.favorite_border,
+            completedMode ? Icons.celebration_outlined : Icons.eco_outlined,
             size: 48,
             color: AppTheme.textLight,
           ),
           const SizedBox(height: 12),
           Center(
             child: Text(
-              completedMode ? '还没有完成的记录，加油创造回忆吧～' : '点 + 加一条想一起做的事',
+              completedMode ? '还没有拔草记录，一起去实现吧～' : '点 + 种下第一个想一起做的事 🌱',
               style: const TextStyle(color: AppTheme.textLight),
             ),
           ),
@@ -204,117 +209,157 @@ class _BucketListPageState extends State<BucketListPage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
       itemCount: items.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => _showDetail(item),
-            onLongPress: () => _deleteItem(item),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 状态图标
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2, right: 10),
-                    child: Icon(
-                      item.isCompleted
-                          ? Icons.favorite
-                          : Icons.radio_button_unchecked,
-                      color: item.isCompleted
-                          ? AppTheme.accent
-                          : AppTheme.textLight,
-                      size: 22,
+      itemBuilder: (context, index) => _buildCard(items[index], completedMode),
+    );
+  }
+
+  /// 单张卡片：边框粗细 / 左侧色条 / 光晕随「想实现程度」升级（草→花→树），
+  /// 标题上方展示 PlantBadge；操作按钮为拔草 / 重新种下。
+  Widget _buildCard(BucketItem item, bool completedMode) {
+    final lv = PlantLevel.of(item.intensity);
+
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 状态图标
+        Padding(
+          padding: const EdgeInsets.only(top: 2, right: 10),
+          child: Icon(
+            item.isCompleted ? Icons.favorite : Icons.radio_button_unchecked,
+            color: item.isCompleted ? AppTheme.accent : AppTheme.textLight,
+            size: 22,
+          ),
+        ),
+        // 徽章 + 标题 + 描述 + 照片
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: PlantBadge(level: item.intensity, scale: 0.9),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                item.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+              if (item.description.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    item.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textLight,
                     ),
                   ),
-                  // 标题 + 描述
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                        if (item.description.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              item.description,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.textLight,
-                              ),
-                            ),
-                          ),
-                        if (item.photos.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.photo_library_outlined,
-                                    size: 14, color: AppTheme.textLight),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${item.photos.length} 张照片',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textLight),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
+                ),
+              if (item.photos.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.photo_library_outlined,
+                          size: 14, color: AppTheme.textLight),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${item.photos.length} 张照片',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textLight),
+                      ),
+                    ],
                   ),
-                  // 操作按钮
-                  if (!completedMode)
-                    IconButton(
-                      onPressed: () => _markComplete(item),
-                      icon: const Icon(Icons.check_circle_outline,
-                          color: AppTheme.primaryDark),
-                      tooltip: '标记已体验',
-                    )
-                  else
-                    IconButton(
-                      onPressed: () => _unmarkComplete(item),
-                      icon: const Icon(Icons.undo, color: AppTheme.textLight),
-                      tooltip: '取消完成',
-                    ),
-                ],
+                ),
+            ],
+          ),
+        ),
+        // 操作按钮：拔草 / 重新种下
+        completedMode
+            ? IconButton(
+                onPressed: () => _unmarkComplete(item),
+                icon: const Icon(Icons.undo, color: AppTheme.textLight),
+                tooltip: '重新种下',
+              )
+            : IconButton(
+                onPressed: () => _markComplete(item),
+                icon: const Icon(Icons.check_circle_outline,
+                    color: AppTheme.primaryDark),
+                tooltip: '拔草',
+              ),
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: lv.color.withValues(alpha: lv.borderWidth >= 3 ? 0.85 : 0.5),
+          width: lv.borderWidth,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: lv.glow
+                ? lv.color.withValues(alpha: 0.28)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: lv.glow ? 10 : 6,
+            spreadRadius: lv.glow ? 0.4 : 0,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20 - lv.borderWidth),
+        child: Stack(
+          children: [
+            // 左侧色条（等级越高越宽）
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(width: lv.barWidth, color: lv.color),
+            ),
+            InkWell(
+              onTap: () => _showDetail(item),
+              onLongPress: () => _deleteItem(item),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12 + lv.barWidth, 14, 8, 14),
+                child: content,
               ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
   Future<void> _markComplete(BucketItem item) async {
-    // 弹窗让写回忆日记
+    // 弹窗让写拔草手记
     final memoryCtrl = TextEditingController();
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('标记为已体验'),
+        title: const Text('拔草啦！'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('「${item.title}」\n写下当时的回忆吧～',
+            Text('「${item.title}」\n写下拔草那天的回忆吧～',
                 style: const TextStyle(height: 1.5)),
             const SizedBox(height: 12),
             TextField(
               controller: memoryCtrl,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: '回忆日记（可选）',
+                labelText: '拔草手记（可选）',
                 hintText: '秋天的阳光正好，落叶踩起来沙沙响…',
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -325,11 +370,11 @@ class _BucketListPageState extends State<BucketListPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('稍后'),
+            child: const Text('还没实现'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('完成！'),
+            child: const Text('拔草！'),
           ),
         ],
       ),
@@ -344,7 +389,7 @@ class _BucketListPageState extends State<BucketListPage> {
       _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('太棒了，又创造了一段回忆 ❤️')),
+        const SnackBar(content: Text('拔草成功！又一起实现了一件想做的事 🌿')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -415,6 +460,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
           title: _item.title,
           description: _item.description,
           category: _item.category,
+          intensity: _item.intensity,
           sortOrder: _item.sortOrder,
           isCompleted: _item.isCompleted,
           completedAt: _item.completedAt,
@@ -444,6 +490,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
           title: _item.title,
           description: _item.description,
           category: _item.category,
+          intensity: _item.intensity,
           sortOrder: _item.sortOrder,
           isCompleted: _item.isCompleted,
           completedAt: _item.completedAt,
@@ -472,6 +519,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
             title: _item.title,
             description: _item.description,
             category: _item.category,
+            intensity: _item.intensity,
             sortOrder: _item.sortOrder,
             isCompleted: _item.isCompleted,
             completedAt: _item.completedAt,
@@ -483,7 +531,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
       widget.onChanged();
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('回忆已保存')));
+          .showSnackBar(const SnackBar(content: Text('手记已保存')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -515,6 +563,12 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
               ),
             ),
             const SizedBox(height: 16),
+            // 想实现程度徽章
+            Align(
+              alignment: Alignment.centerLeft,
+              child: PlantBadge(level: _item.intensity, scale: 1.1),
+            ),
+            const SizedBox(height: 12),
             // 标题 + 状态
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,21 +595,21 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
             ],
             if (_item.completedAt.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('体验时间：${_item.completedAt.substring(0, 10)}',
+              Text('拔草时间：${_item.completedAt.substring(0, 10)}',
                   style: const TextStyle(
                       fontSize: 12, color: AppTheme.textLight)),
             ],
-            // 回忆日记
+            // 拔草手记
             if (_item.isCompleted) ...[
               const SizedBox(height: 16),
-              const Text('回忆日记',
+              const Text('拔草手记',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
               const SizedBox(height: 8),
               TextField(
                 controller: _memoryCtrl,
                 maxLines: 4,
                 decoration: const InputDecoration(
-                  hintText: '写一段回忆…',
+                  hintText: '写下拔草那天的回忆…',
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding:
@@ -567,7 +621,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
                 alignment: Alignment.centerRight,
                 child: FilledButton.tonal(
                   onPressed: _saveMemory,
-                  child: const Text('保存回忆'),
+                  child: const Text('保存手记'),
                 ),
               ),
             ],
@@ -623,7 +677,7 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
                       child: Image.network(
                         photo.url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           color: Colors.grey[200],
                           child: const Icon(Icons.broken_image,
                               color: AppTheme.textLight),

@@ -111,13 +111,17 @@ class BucketPhotoInline(admin.TabularInline):
 
 @admin.register(BucketItem)
 class BucketItemAdmin(admin.ModelAdmin):
-    """心愿清单：想一起做的事。"""
+    """植物园：想一起做的事（种草/种花/种树）。"""
 
-    list_display = ('title', 'category', 'is_completed', 'completed_at', 'sort_order', 'created_at')
-    list_filter = ('is_completed', 'category')
+    list_display = ('title', 'plant', 'category', 'is_completed', 'completed_at', 'sort_order', 'created_at')
+    list_filter = ('is_completed', 'intensity', 'category')
     search_fields = ('title', 'description', 'memory_text')
     list_editable = ('sort_order', 'is_completed')
     inlines = [BucketPhotoInline]
+
+    @admin.display(description='程度', ordering='intensity')
+    def plant(self, obj):
+        return {1: '🌱 种草', 2: '🌻 种花', 3: '🌳 种树'}.get(obj.intensity, '🌱 种草')
 
 
 @admin.register(ChatSession)

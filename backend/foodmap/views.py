@@ -731,6 +731,7 @@ def _bucket_json(item):
         'title': item.title,
         'description': item.description,
         'category': item.category,
+        'intensity': item.intensity,
         'sort_order': item.sort_order,
         'is_completed': item.is_completed,
         'completed_at': item.completed_at.isoformat() if item.completed_at else '',
@@ -742,13 +743,24 @@ def _bucket_json(item):
     return data
 
 
+def _clamp_intensity(value, default=1):
+    """把想实现程度（种草1/种花2/种树3）限制在 1~3。"""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(3, n))
+
+
 @require_api_token
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def api_bucket(request):
     """心愿清单列表 / 新建。"""
     if request.method == 'GET':
-        qs = BucketItem.objects.prefetch_related('photos').order_by('sort_order', '-created_at')
+        qs = BucketItem.objects.prefetch_related('photos').order_by(
+            '-intensity', 'sort_order', '-created_at'
+        )
         return JsonResponse({'items': [_bucket_json(i) for i in qs]})
 
     try:
@@ -764,6 +776,7 @@ def api_bucket(request):
         title=title[:200],
         description=(data.get('description') or '').strip(),
         category=(data.get('category') or '').strip()[:50],
+        intensity=_clamp_intensity(data.get('intensity')),
     )
     return JsonResponse({'ok': True, 'item': _bucket_json(item)}, status=201)
 
@@ -801,6 +814,9 @@ def api_bucket_detail(request, item_id):
     item.description = (data.get('description') or '').strip()
     item.category = (data.get('category') or '').strip()[:50]
     item.sort_order = data.get('sort_order', item.sort_order)
+    # 想实现程度（仅显式传入时更新，避免局部更新重置）
+    if 'intensity' in data:
+        item.intensity = _clamp_intensity(data.get('intensity'), item.intensity)
 
     # 标记完成/取消完成
     if 'is_completed' in data:

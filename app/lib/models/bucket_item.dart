@@ -1,9 +1,12 @@
-/// 心愿清单项：想一起做的事。
+/// 植物园条目：想一起做的事（种草/种花/种树）。
 class BucketItem {
   final int id;
   final String title;
   final String description;
   final String category;
+
+  /// 想实现程度：1~3，越大越想要（1 种草 🌱 / 2 种花 🌻 / 3 种树 🌳）。
+  final int intensity;
   final int sortOrder;
   final bool isCompleted;
   final String completedAt;
@@ -17,6 +20,7 @@ class BucketItem {
     required this.title,
     this.description = '',
     this.category = '',
+    this.intensity = 1,
     this.sortOrder = 0,
     this.isCompleted = false,
     this.completedAt = '',
@@ -31,6 +35,7 @@ class BucketItem {
         title: json['title']?.toString() ?? '',
         description: json['description']?.toString() ?? '',
         category: json['category']?.toString() ?? '',
+        intensity: (json['intensity'] as num?)?.toInt() ?? 1,
         sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
         isCompleted: json['is_completed'] == true,
         completedAt: json['completed_at']?.toString() ?? '',
@@ -44,7 +49,7 @@ class BucketItem {
       );
 }
 
-/// 心愿清单照片
+/// 植物园照片
 class BucketPhoto {
   final int id;
   final String url;

@@ -395,6 +395,9 @@ class BucketItem(models.Model):
     title = models.CharField('标题', max_length=200)
     description = models.TextField('描述/文案', blank=True)
     category = models.CharField('分类', max_length=50, blank=True)
+    intensity = models.IntegerField(
+        '想实现程度', default=1, help_text='1~3：种草/种花/种树，越大越想要'
+    )
     sort_order = models.IntegerField('排序', default=0)
     is_completed = models.BooleanField('已体验', default=False)
     completed_at = models.DateTimeField('体验日期', null=True, blank=True)
@@ -403,9 +406,10 @@ class BucketItem(models.Model):
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
     class Meta:
-        verbose_name = '心愿清单'
-        verbose_name_plural = '心愿清单'
-        ordering = ['sort_order', '-created_at']
+        verbose_name = '植物园'
+        verbose_name_plural = '植物园'
+        # 想实现程度从高到低（树→花→草），其次手动排序，最后新的在前
+        ordering = ['-intensity', 'sort_order', '-created_at']
 
     def __str__(self):
         prefix = '✅ ' if self.is_completed else '⬜ '

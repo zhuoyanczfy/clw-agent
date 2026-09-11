@@ -497,9 +497,9 @@ class FoodmapApi {
   static Future<void> deletePetEvent(int eventId) =>
       _deleteJson('/api/pets/events/$eventId/');
 
-  // ---------- 心愿清单 ----------
+  // ---------- 植物园（种草/拔草） ----------
 
-  /// 心愿清单列表（按排序 → 创建时间倒序）。
+  /// 植物园列表（按想实现程度 → 排序 → 创建时间倒序）。
   static Future<List<BucketItem>> fetchBucketList() async {
     final json = await _getJson('/api/bucket/') as Map<String, dynamic>;
     return (json['items'] as List)
@@ -507,26 +507,29 @@ class FoodmapApi {
         .toList();
   }
 
-  /// 新建心愿项。
+  /// 种草：新建一条。
   static Future<BucketItem> createBucketItem({
     required String title,
     String description = '',
     String category = '',
+    int intensity = 1,
   }) async {
     final json = await _postJson('/api/bucket/', {
       'title': title,
       'description': description,
       'category': category,
+      'intensity': intensity,
     }) as Map<String, dynamic>;
     return BucketItem.fromJson(json['item'] as Map<String, dynamic>);
   }
 
-  /// 编辑心愿项（标题/描述/分类/排序/完成状态/回忆日记）。
+  /// 编辑（标题/描述/分类/想实现程度/排序/拔草状态/拔草手记）。
   static Future<BucketItem> updateBucketItem(
     int id, {
     String? title,
     String? description,
     String? category,
+    int? intensity,
     int? sortOrder,
     bool? isCompleted,
     String? memoryText,
@@ -535,6 +538,7 @@ class FoodmapApi {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (category != null) 'category': category,
+      if (intensity != null) 'intensity': intensity,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (isCompleted != null) 'is_completed': isCompleted,
       if (memoryText != null) 'memory_text': memoryText,
@@ -543,11 +547,11 @@ class FoodmapApi {
     return BucketItem.fromJson(json['item'] as Map<String, dynamic>);
   }
 
-  /// 删除心愿项（含照片）。
+  /// 枯萎：删除一条（含照片）。
   static Future<void> deleteBucketItem(int id) =>
       _deleteJson('/api/bucket/$id/');
 
-  /// 上传心愿照片（multipart，字段名 images，可多张）。
+  /// 上传照片（multipart，字段名 images，可多张）。
   static Future<List<BucketPhoto>> uploadBucketPhotos(
     int itemId,
     List<XFile> photos,
@@ -569,7 +573,7 @@ class FoodmapApi {
         .toList();
   }
 
-  /// 删除单张心愿照片。
+  /// 删除单张照片。
   static Future<void> deleteBucketPhoto(int photoId) =>
       _deleteJson('/api/bucket/photos/$photoId/');
 
