@@ -36,6 +36,8 @@ from .models import (
     Pet,
     PetEvent,
     PetPhoto,
+    PlantBed,
+    PlantBedItem,
     Quote,
     Restaurant,
     SplashImage,
@@ -871,6 +873,168 @@ def api_bucket_photo_delete(request, photo_id):
     except (FileNotFoundError, OSError):
         pass
     return JsonResponse({'ok': True})
+
+
+# ============ 花坛（一日游园计划） ============
+
+
+def _bed_harvested(bed):
+    """坛里的植物全部拔草即已收获（空坛不算）。"""
+    members = list(bed.bed_items.all())
+    return bool(members) and all(m.item.is_completed for m in members)
+
+
+def _plant_bed_json(bed):
+    members = [
+        {
+            'id': m.pk,
+            'item_id': m.item.pk,
+            'title': m.item.title,
+            'intensity': m.item.intensity,
+            'is_completed': m.item.is_completed,
+            'completed_at': (
+                timezone.localtime(m.item.completed_at).strftime('%Y-%m-%d')
+                if m.item.completed_at else ''
+            ),
+            'memory_text': m.item.memory_text,
+            'time_note': m.time_note,
+            'sort_order': m.sort_order,
+        }
+        for m in bed.bed_items.select_related('item')
+    ]
+    done = sum(1 for m in members if m['is_completed'])
+    return {
+        'id': bed.pk,
+        'title': bed.title,
+        'visit_date': bed.visit_date.isoformat() if bed.visit_date else '',
+        'items': members,
+        'done_count': done,
+        'total': len(members),
+        'is_harvested': bool(members) and done == len(members),
+        'created_at': timezone.localtime(bed.created_at).strftime('%Y-%m-%d %H:%M'),
+        'updated_at': timezone.localtime(bed.updated_at).strftime('%Y-%m-%d %H:%M'),
+    }
+
+
+def _parse_bed_items(data):
+    """解析花坛成员列表 [{item_id, time_note?}]，按传入顺序生成 sort_order。"""
+    raw = data.get('items')
+    if not isinstance(raw, list) or not raw:
+        return None, '花坛里至少要种一株植物'
+    rows = []
+    for idx, row in enumerate(raw):
+        if not isinstance(row, dict):
+            return None, '成员格式不正确'
+        try:
+            item_id = int(row.get('item_id'))
+        except (TypeError, ValueError):
+            return None, '成员缺少 item_id'
+        rows.append({
+            'item_id': item_id,
+            'time_note': (row.get('time_note') or '').strip()[:20],
+            'sort_order': idx,
+        })
+    if len({r['item_id'] for r in rows}) != len(rows):
+        return None, '同一株植物不能种两次'
+    return rows, None
+
+
+def _save_bed_items(bed, rows):
+    """全量替换花坛成员（先删后建，同事务）。"""
+    items = {i.pk: i for i in BucketItem.objects.filter(pk__in=[r['item_id'] for r in rows])}
+    with transaction.atomic():
+        if bed.pk:
+            bed.bed_items.all().delete()
+        PlantBedItem.objects.bulk_create([
+            PlantBedItem(bed=bed, item=items[r['item_id']], time_note=r['time_note'],
+                         sort_order=r['sort_order'])
+            for r in rows
+        ])
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_plant_beds(request):
+    """花坛列表 / 垒一个新花坛。"""
+    if request.method == 'GET':
+        beds = list(PlantBed.objects.prefetch_related('bed_items__item'))
+        # 进行中在前（赏花日近的在前、没定的最后），已收获的按最近更新在前
+        ongoing = [b for b in beds if not _bed_harvested(b)]
+        harvested = [b for b in beds if _bed_harvested(b)]
+        ongoing.sort(key=lambda b: (b.visit_date is None, b.visit_date or datetime.date.max))
+        harvested.sort(key=lambda b: -b.updated_at.timestamp())
+        ordered = ongoing + harvested
+        return JsonResponse({'beds': [_plant_bed_json(b) for b in ordered]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    title = (data.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': '花坛要有个名字'}, status=400)
+
+    rows, err = _parse_bed_items(data)
+    if err:
+        return JsonResponse({'error': err}, status=400)
+
+    # 只能种"生长中"的植物
+    items = {i.pk: i for i in BucketItem.objects.filter(pk__in=[r['item_id'] for r in rows])}
+    if len(items) != len({r['item_id'] for r in rows}):
+        return JsonResponse({'error': '有植物不存在'}, status=400)
+    if any(i.is_completed for i in items.values()):
+        return JsonResponse({'error': '已拔草的植物不能再种进花坛'}, status=400)
+
+    bed = PlantBed(title=title[:100], visit_date=_parse_date(data.get('visit_date')))
+    with transaction.atomic():
+        bed.save()
+        _save_bed_items(bed, rows)
+    return JsonResponse({'ok': True, 'bed': _plant_bed_json(bed)}, status=201)
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def api_plant_bed_detail(request, bed_id):
+    """花坛详情 / 编辑 / 拆掉（植物各回植物园，不受影响）。"""
+    bed = get_object_or_404(PlantBed.objects.prefetch_related('bed_items__item'), pk=bed_id)
+    if request.method == 'GET':
+        return JsonResponse({'bed': _plant_bed_json(bed)})
+
+    if request.method == 'DELETE':
+        bed.delete()
+        return JsonResponse({'ok': True})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    title = (data.get('title') or '').strip()
+    if title:
+        bed.title = title[:100]
+    if 'visit_date' in data:
+        bed.visit_date = _parse_date(data.get('visit_date'))
+
+    if 'items' in data:
+        rows, err = _parse_bed_items(data)
+        if err:
+            return JsonResponse({'error': err}, status=400)
+        # 已在坛里的成员允许是已拔草的（保留），新加入的必须是生长中
+        current = {m.item_id for m in bed.bed_items.all()}
+        new_ids = {r['item_id'] for r in rows} - current
+        picked = BucketItem.objects.filter(pk__in=new_ids)
+        if picked.filter(is_completed=True).exists():
+            return JsonResponse({'error': '已拔草的植物不能再种进花坛'}, status=400)
+
+    bed.save()
+    if 'items' in data:
+        _save_bed_items(bed, rows)
+    # 成员变了，重新拉一遍再序列化（prefetch 缓存已过期）
+    bed = PlantBed.objects.prefetch_related('bed_items__item').get(pk=bed.pk)
+    return JsonResponse({'ok': True, 'bed': _plant_bed_json(bed)})
 
 
 # ============ 宠物名片 ============

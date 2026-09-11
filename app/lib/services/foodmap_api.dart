@@ -14,6 +14,7 @@ import '../models/restaurant.dart';
 import '../models/splash_image.dart';
 import '../models/wishlist_item.dart';
 import '../models/bucket_item.dart';
+import '../models/plant_bed.dart';
 import 'api_config.dart';
 
 /// 后端 API 异常（网络失败 / 非 2xx）。
@@ -535,13 +536,13 @@ class FoodmapApi {
     String? memoryText,
   }) async {
     final body = <String, dynamic>{
-      if (title != null) 'title': title,
-      if (description != null) 'description': description,
-      if (category != null) 'category': category,
-      if (intensity != null) 'intensity': intensity,
-      if (sortOrder != null) 'sort_order': sortOrder,
-      if (isCompleted != null) 'is_completed': isCompleted,
-      if (memoryText != null) 'memory_text': memoryText,
+      'title': ?title,
+      'description': ?description,
+      'category': ?category,
+      'intensity': ?intensity,
+      'sort_order': ?sortOrder,
+      'is_completed': ?isCompleted,
+      'memory_text': ?memoryText,
     };
     final json = await _putJson('/api/bucket/$id/', body) as Map<String, dynamic>;
     return BucketItem.fromJson(json['item'] as Map<String, dynamic>);
@@ -576,6 +577,64 @@ class FoodmapApi {
   /// 删除单张照片。
   static Future<void> deleteBucketPhoto(int photoId) =>
       _deleteJson('/api/bucket/photos/$photoId/');
+
+  // ---------- 花坛（一日游园计划） ----------
+
+  /// 花坛列表（进行中在前：赏花日近→远、没定最后；已收获按最近更新在前）。
+  static Future<List<PlantBed>> fetchPlantBeds() async {
+    final json = await _getJson('/api/plant-beds/') as Map<String, dynamic>;
+    return (json['beds'] as List)
+        .map((e) => PlantBed.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 单个花坛详情（游园清单页用，拔草后刷新）。
+  static Future<PlantBed> fetchPlantBed(int id) async {
+    final json = await _getJson('/api/plant-beds/$id/') as Map<String, dynamic>;
+    return PlantBed.fromJson(json['bed'] as Map<String, dynamic>);
+  }
+
+  /// 垒一个花坛：[members] 顺序即游园顺序，[visitDate] 为空表示先不定日子。
+  static Future<PlantBed> createPlantBed({
+    required String title,
+    String visitDate = '',
+    required List<({int itemId, String timeNote})> members,
+  }) async {
+    final json = await _postJson('/api/plant-beds/', {
+      'title': title,
+      if (visitDate.isNotEmpty) 'visit_date': visitDate,
+      'items': [
+        for (final m in members)
+          {'item_id': m.itemId, 'time_note': m.timeNote},
+      ],
+    }) as Map<String, dynamic>;
+    return PlantBed.fromJson(json['bed'] as Map<String, dynamic>);
+  }
+
+  /// 编辑花坛：传 [members] 则全量替换成员；[visitDate] 传空串表示清空赏花日。
+  static Future<PlantBed> updatePlantBed(
+    int id, {
+    String? title,
+    String? visitDate,
+    List<({int itemId, String timeNote})>? members,
+  }) async {
+    final body = <String, dynamic>{
+      'title': ?title,
+      'visit_date': ?visitDate,
+      if (members != null)
+        'items': [
+          for (final m in members)
+            {'item_id': m.itemId, 'time_note': m.timeNote},
+        ],
+    };
+    final json =
+        await _putJson('/api/plant-beds/$id/', body) as Map<String, dynamic>;
+    return PlantBed.fromJson(json['bed'] as Map<String, dynamic>);
+  }
+
+  /// 拆掉花坛（植物各回植物园，不受影响）。
+  static Future<void> deletePlantBed(int id) =>
+      _deleteJson('/api/plant-beds/$id/');
 
   // ---------- AI 推荐官（SSE 流式聊天） ----------
 

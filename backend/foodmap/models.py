@@ -434,6 +434,49 @@ class BucketPhoto(models.Model):
         return f'{self.bucket.title} 的照片 #{self.pk}'
 
 
+class PlantBed(models.Model):
+    """花坛：把多株种草组合成一天的游园计划（可定一个赏花日）。
+
+    完成态不落库，由成员推导——坛里的植物全部拔草即"已收获 🧺"。
+    """
+
+    title = models.CharField('花坛名称', max_length=100)
+    visit_date = models.DateField('赏花日', null=True, blank=True, help_text='约好去把坛里的都赏一遍的日期')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '花坛'
+        verbose_name_plural = '花坛'
+        # 赏花日近的在前，没定的排最后（视图里会再按收获态分组）
+        ordering = ['visit_date', '-created_at']
+
+    def __str__(self):
+        return f'🌷 {self.title}'
+
+
+class PlantBedItem(models.Model):
+    """花坛里的一株植物：引用植物园条目（拔草状态两边同步），可带时段备注。"""
+
+    bed = models.ForeignKey(
+        PlantBed, on_delete=models.CASCADE, related_name='bed_items', verbose_name='所属花坛'
+    )
+    item = models.ForeignKey(
+        BucketItem, on_delete=models.CASCADE, related_name='in_beds', verbose_name='植物园条目'
+    )
+    sort_order = models.IntegerField('顺序', default=0, help_text='游园顺序，小的在前')
+    time_note = models.CharField('时段', max_length=20, blank=True, help_text='如：早上/中午/下午')
+
+    class Meta:
+        verbose_name = '花坛植物'
+        verbose_name_plural = '花坛植物'
+        ordering = ['sort_order', 'id']
+        unique_together = ('bed', 'item')
+
+    def __str__(self):
+        return f'{self.bed.title} · {self.item.title}'
+
+
 class ChatSession(models.Model):
     """推荐官聊天会话：单用户，完整对话存 messages（JSON 数组 [{role, content}]）。
 

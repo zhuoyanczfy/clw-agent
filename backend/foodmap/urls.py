@@ -61,4 +61,7 @@ urlpatterns = [
     path('api/bucket/<int:item_id>/', views.api_bucket_detail, name='bucket_detail'),
     path('api/bucket/<int:item_id>/photos/', views.api_bucket_photos, name='bucket_photos'),
     path('api/bucket/photos/<int:photo_id>/', views.api_bucket_photo_delete, name='bucket_photo_delete'),
+    # 花坛（一日游园计划）
+    path('api/plant-beds/', views.api_plant_beds, name='plant_beds'),
+    path('api/plant-beds/<int:bed_id>/', views.api_plant_bed_detail, name='plant_bed_detail'),
 ]

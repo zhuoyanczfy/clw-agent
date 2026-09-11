@@ -6,6 +6,7 @@ import '../services/foodmap_api.dart';
 import '../theme.dart';
 import '../widgets/plant_level.dart';
 import 'bucket_form_page.dart';
+import 'plant_bed_list_page.dart';
 
 /// 植物园：想一起做的事，可种草/种花/种树分级，拔草（完成）、附照片和手记。
 class BucketListPage extends StatefulWidget {
@@ -121,6 +122,13 @@ class _BucketListPageState extends State<BucketListPage> {
       appBar: AppBar(
         title: const Text('植物园'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PlantBedListPage()),
+            ),
+            icon: const Icon(Icons.local_florist),
+            tooltip: '花坛',
+          ),
           IconButton(
             onPressed: _load,
             icon: const Icon(Icons.refresh),

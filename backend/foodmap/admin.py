@@ -14,6 +14,8 @@ from .models import (
     Pet,
     PetEvent,
     PetPhoto,
+    PlantBed,
+    PlantBedItem,
     Quote,
     Restaurant,
     SplashImage,
@@ -122,6 +124,32 @@ class BucketItemAdmin(admin.ModelAdmin):
     @admin.display(description='程度', ordering='intensity')
     def plant(self, obj):
         return {1: '🌱 种草', 2: '🌻 种花', 3: '🌳 种树'}.get(obj.intensity, '🌱 种草')
+
+
+class PlantBedItemInline(admin.TabularInline):
+    model = PlantBedItem
+    extra = 0
+    fields = ('item', 'time_note', 'sort_order')
+    ordering = ('sort_order',)
+
+
+@admin.register(PlantBed)
+class PlantBedAdmin(admin.ModelAdmin):
+    """花坛：多株种草组合的一日游园计划（赏花日）。"""
+
+    list_display = ('title', 'visit_date', 'member_count', 'harvested', 'created_at')
+    list_filter = ('visit_date',)
+    search_fields = ('title',)
+    inlines = [PlantBedItemInline]
+
+    @admin.display(description='株数')
+    def member_count(self, obj):
+        return obj.bed_items.count()
+
+    @admin.display(description='已收获', boolean=True)
+    def harvested(self, obj):
+        members = list(obj.bed_items.select_related('item'))
+        return bool(members) and all(m.item.is_completed for m in members)
 
 
 @admin.register(ChatSession)
