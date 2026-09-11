@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from .models import (
     AppConfig,
+    BucketItem,
+    BucketPhoto,
     ChatSession,
     DailyMeal,
     DiningRecord,
@@ -98,6 +100,24 @@ class WishlistItemAdmin(admin.ModelAdmin):
     list_display = ('name', 'district', 'status', 'source', 'per_capita', 'created_at')
     list_filter = ('status', 'source')
     search_fields = ('name', 'reason')
+
+
+class BucketPhotoInline(admin.TabularInline):
+    model = BucketPhoto
+    extra = 0
+    fields = ('image',)
+    show_change_link = True
+
+
+@admin.register(BucketItem)
+class BucketItemAdmin(admin.ModelAdmin):
+    """心愿清单：想一起做的事。"""
+
+    list_display = ('title', 'category', 'is_completed', 'completed_at', 'sort_order', 'created_at')
+    list_filter = ('is_completed', 'category')
+    search_fields = ('title', 'description', 'memory_text')
+    list_editable = ('sort_order', 'is_completed')
+    inlines = [BucketPhotoInline]
 
 
 @admin.register(ChatSession)

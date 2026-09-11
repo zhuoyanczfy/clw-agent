@@ -23,6 +23,8 @@ from django.views.decorators.http import require_http_methods
 from .auth import require_api_token
 from .models import (
     AppConfig,
+    BucketItem,
+    BucketPhoto,
     ChatSession,
     DailyMeal,
     DiningRecord,
@@ -717,6 +719,141 @@ def api_wishlist_delete(request, item_id):
     """删除待尝项。"""
     item = get_object_or_404(WishlistItem, pk=item_id)
     item.delete()
+    return JsonResponse({'ok': True})
+
+
+# ============ 心愿清单 ============
+
+
+def _bucket_json(item):
+    data = {
+        'id': item.pk,
+        'title': item.title,
+        'description': item.description,
+        'category': item.category,
+        'sort_order': item.sort_order,
+        'is_completed': item.is_completed,
+        'completed_at': item.completed_at.isoformat() if item.completed_at else '',
+        'memory_text': item.memory_text,
+        'photos': [{'id': p.pk, 'url': p.image.url} for p in item.photos.all()],
+        'created_at': timezone.localtime(item.created_at).strftime('%Y-%m-%d %H:%M'),
+        'updated_at': timezone.localtime(item.updated_at).strftime('%Y-%m-%d %H:%M'),
+    }
+    return data
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def api_bucket(request):
+    """心愿清单列表 / 新建。"""
+    if request.method == 'GET':
+        qs = BucketItem.objects.prefetch_related('photos').order_by('sort_order', '-created_at')
+        return JsonResponse({'items': [_bucket_json(i) for i in qs]})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    title = (data.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': '标题不能为空'}, status=400)
+
+    item = BucketItem.objects.create(
+        title=title[:200],
+        description=(data.get('description') or '').strip(),
+        category=(data.get('category') or '').strip()[:50],
+    )
+    return JsonResponse({'ok': True, 'item': _bucket_json(item)}, status=201)
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def api_bucket_detail(request, item_id):
+    """心愿项详情 / 编辑 / 删除。"""
+    item = get_object_or_404(
+        BucketItem.objects.prefetch_related('photos'),
+        pk=item_id,
+    )
+    if request.method == 'GET':
+        return JsonResponse({'item': _bucket_json(item)})
+
+    if request.method == 'DELETE':
+        photo_paths = [p.image.path for p in item.photos.all()]
+        item.delete()
+        for path in photo_paths:
+            try:
+                os.remove(path)
+            except (FileNotFoundError, OSError):
+                pass
+        return JsonResponse({'ok': True})
+
+    try:
+        data = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+
+    title = (data.get('title') or '').strip()
+    if title:
+        item.title = title[:200]
+    item.description = (data.get('description') or '').strip()
+    item.category = (data.get('category') or '').strip()[:50]
+    item.sort_order = data.get('sort_order', item.sort_order)
+
+    # 标记完成/取消完成
+    if 'is_completed' in data:
+        item.is_completed = bool(data['is_completed'])
+        item.completed_at = timezone.now() if item.is_completed else None
+    # 回忆日记
+    if 'memory_text' in data:
+        item.memory_text = (data.get('memory_text') or '').strip()
+
+    item.save()
+    return JsonResponse({'ok': True, 'item': _bucket_json(item)})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_bucket_photos(request, item_id):
+    """上传心愿照片（multipart，字段名 images，可多张）。"""
+    item = get_object_or_404(BucketItem, pk=item_id)
+    photo_field = forms.ImageField()
+    files = request.FILES.getlist('images')
+    if not files:
+        return JsonResponse({'error': '缺少图片字段 images'}, status=400)
+    for f in files:
+        if f.size > 10 * 1024 * 1024:
+            return JsonResponse({'error': f'照片「{f.name}」超过 10MB'}, status=400)
+        err = _clean_image(photo_field, f, '照片')
+        if err:
+            return JsonResponse({'error': err}, status=400)
+    try:
+        with transaction.atomic():
+            saved = []
+            for f in files:
+                photo = BucketPhoto.objects.create(bucket=item, image=f)
+                saved.append({'id': photo.pk, 'url': photo.image.url})
+    except Exception as exc:
+        logger.exception('心愿照片上传失败')
+        return JsonResponse({'error': f'照片保存失败：{exc}'}, status=500)
+    return JsonResponse({'ok': True, 'photos': saved})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['DELETE'])
+def api_bucket_photo_delete(request, photo_id):
+    """删除单张心愿照片。"""
+    photo = get_object_or_404(BucketPhoto, pk=photo_id)
+    path = photo.image.path
+    photo.delete()
+    try:
+        os.remove(path)
+    except (FileNotFoundError, OSError):
+        pass
     return JsonResponse({'ok': True})
 
 

@@ -13,6 +13,7 @@ import '../models/quote.dart';
 import '../models/restaurant.dart';
 import '../models/splash_image.dart';
 import '../models/wishlist_item.dart';
+import '../models/bucket_item.dart';
 import 'api_config.dart';
 
 /// 后端 API 异常（网络失败 / 非 2xx）。
@@ -495,6 +496,82 @@ class FoodmapApi {
 
   static Future<void> deletePetEvent(int eventId) =>
       _deleteJson('/api/pets/events/$eventId/');
+
+  // ---------- 心愿清单 ----------
+
+  /// 心愿清单列表（按排序 → 创建时间倒序）。
+  static Future<List<BucketItem>> fetchBucketList() async {
+    final json = await _getJson('/api/bucket/') as Map<String, dynamic>;
+    return (json['items'] as List)
+        .map((e) => BucketItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 新建心愿项。
+  static Future<BucketItem> createBucketItem({
+    required String title,
+    String description = '',
+    String category = '',
+  }) async {
+    final json = await _postJson('/api/bucket/', {
+      'title': title,
+      'description': description,
+      'category': category,
+    }) as Map<String, dynamic>;
+    return BucketItem.fromJson(json['item'] as Map<String, dynamic>);
+  }
+
+  /// 编辑心愿项（标题/描述/分类/排序/完成状态/回忆日记）。
+  static Future<BucketItem> updateBucketItem(
+    int id, {
+    String? title,
+    String? description,
+    String? category,
+    int? sortOrder,
+    bool? isCompleted,
+    String? memoryText,
+  }) async {
+    final body = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (category != null) 'category': category,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (isCompleted != null) 'is_completed': isCompleted,
+      if (memoryText != null) 'memory_text': memoryText,
+    };
+    final json = await _putJson('/api/bucket/$id/', body) as Map<String, dynamic>;
+    return BucketItem.fromJson(json['item'] as Map<String, dynamic>);
+  }
+
+  /// 删除心愿项（含照片）。
+  static Future<void> deleteBucketItem(int id) =>
+      _deleteJson('/api/bucket/$id/');
+
+  /// 上传心愿照片（multipart，字段名 images，可多张）。
+  static Future<List<BucketPhoto>> uploadBucketPhotos(
+    int itemId,
+    List<XFile> photos,
+  ) async {
+    final base = await _base();
+    if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
+    final request = http.MultipartRequest(
+        'POST', _uri(base, '/api/bucket/$itemId/photos/'))
+      ..headers['X-Api-Token'] = AppConfig.apiToken;
+    for (final photo in photos) {
+      request.files.add(await _filePart('images', photo));
+    }
+    final streamed = await request.send().timeout(const Duration(seconds: 120));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode >= 300) _throw(resp);
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    return (json['photos'] as List)
+        .map((e) => BucketPhoto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 删除单张心愿照片。
+  static Future<void> deleteBucketPhoto(int photoId) =>
+      _deleteJson('/api/bucket/photos/$photoId/');
 
   // ---------- AI 推荐官（SSE 流式聊天） ----------
 

@@ -389,6 +389,47 @@ class WishlistItem(models.Model):
         return self.name
 
 
+class BucketItem(models.Model):
+    """心愿清单：想一起做的事，可标记已体验、附照片和回忆。"""
+
+    title = models.CharField('标题', max_length=200)
+    description = models.TextField('描述/文案', blank=True)
+    category = models.CharField('分类', max_length=50, blank=True)
+    sort_order = models.IntegerField('排序', default=0)
+    is_completed = models.BooleanField('已体验', default=False)
+    completed_at = models.DateTimeField('体验日期', null=True, blank=True)
+    memory_text = models.TextField('回忆日记', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '心愿清单'
+        verbose_name_plural = '心愿清单'
+        ordering = ['sort_order', '-created_at']
+
+    def __str__(self):
+        prefix = '✅ ' if self.is_completed else '⬜ '
+        return f'{prefix}{self.title}'
+
+
+class BucketPhoto(models.Model):
+    """心愿清单照片（一条可多张）。"""
+
+    bucket = models.ForeignKey(
+        BucketItem, on_delete=models.CASCADE, related_name='photos', verbose_name='心愿'
+    )
+    image = models.ImageField('照片', upload_to='bucket_photos/%Y/%m/')
+    created_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '心愿照片'
+        verbose_name_plural = '心愿照片'
+        ordering = ['id']
+
+    def __str__(self):
+        return f'{self.bucket.title} 的照片 #{self.pk}'
+
+
 class ChatSession(models.Model):
     """推荐官聊天会话：单用户，完整对话存 messages（JSON 数组 [{role, content}]）。
 

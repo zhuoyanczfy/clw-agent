@@ -56,4 +56,9 @@ urlpatterns = [
     path('api/meal/today/', views.api_meal_today, name='meal_today'),
     path('api/meal/history/', views.api_meal_history, name='meal_history'),
     path('api/meal/random/', views.api_meal_random, name='meal_random'),
+    # 心愿清单
+    path('api/bucket/', views.api_bucket, name='bucket'),
+    path('api/bucket/<int:item_id>/', views.api_bucket_detail, name='bucket_detail'),
+    path('api/bucket/<int:item_id>/photos/', views.api_bucket_photos, name='bucket_photos'),
+    path('api/bucket/photos/<int:photo_id>/', views.api_bucket_photo_delete, name='bucket_photo_delete'),
 ]

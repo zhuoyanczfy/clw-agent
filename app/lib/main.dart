@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'pages/ai_recommend_page.dart';
+import 'pages/bucket_list_page.dart';
 import 'pages/food_page.dart';
 import 'pages/footprint_page.dart';
 import 'pages/home_page.dart';
@@ -198,6 +199,7 @@ class _MainShellState extends State<MainShell> {
           const FoodPage(),
           const FootprintPage(),
           const AiRecommendPage(),
+          const BucketListPage(),
           const SettingsPage(),
         ],
       ),
@@ -228,7 +230,11 @@ class _MainShellState extends State<MainShell> {
             label: '推荐官',
           ),
           NavigationDestination(
-            icon: _navIcon(4, Icons.settings_outlined, Icons.settings),
+            icon: _navIcon(4, Icons.favorite_border, Icons.favorite),
+            label: '心愿',
+          ),
+          NavigationDestination(
+            icon: _navIcon(5, Icons.settings_outlined, Icons.settings),
             label: '设置',
           ),
         ],
