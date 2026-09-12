@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:gifting_app/models/bucket_item.dart';
 import 'package:gifting_app/pages/bucket_form_page.dart';
 import 'package:gifting_app/pages/bucket_list_page.dart';
 
@@ -63,5 +64,22 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '去看一次日出');
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('写一句想一起做的事吧（灰字只是示例）'), findsNothing);
+  });
+
+  testWidgets('编辑模式：传入条目应预填内容并显示保存修改', (tester) async {
+    const item = BucketItem(
+      id: 1,
+      title: '去看海',
+      description: '夏天一起去',
+      intensity: 2,
+    );
+    await tester.pumpWidget(const MaterialApp(home: BucketFormPage(item: item)));
+    await tester.pump();
+
+    // AppBar 标题为「编辑」，标题/描述已预填，按钮为「保存修改」
+    expect(find.widgetWithText(AppBar, '编辑'), findsOneWidget);
+    expect(find.text('去看海'), findsOneWidget);
+    expect(find.text('夏天一起去'), findsOneWidget);
+    expect(find.text('保存修改'), findsOneWidget);
   });
 }

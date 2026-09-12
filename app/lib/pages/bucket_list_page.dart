@@ -516,6 +516,51 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
     }
   }
 
+  Future<void> _edit() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => BucketFormPage(item: _item)),
+    );
+    if (saved != true || !mounted) return;
+    // 重新拉取这一条：标题/描述/想实现程度可能已改
+    try {
+      final items = await FoodmapApi.fetchBucketList();
+      final refreshed = items.firstWhere((i) => i.id == _item.id);
+      setState(() => _item = refreshed);
+    } catch (_) {}
+    widget.onChanged();
+  }
+
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('让「${_item.title}」枯萎？'),
+        content: const Text('不想要了，就让 Ta 从植物园里枯萎吧 🥀'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('枯萎 🥀', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await FoodmapApi.deleteBucketItem(_item.id);
+      widget.onChanged();
+      if (!mounted) return;
+      Navigator.of(context).pop(); // 关闭详情弹窗
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _saveMemory() async {
     final text = _memoryCtrl.text.trim();
     if (text == _item.memoryText) return;
@@ -695,6 +740,28 @@ class _BucketDetailSheetState extends State<_BucketDetailSheet> {
                   );
                 },
               ),
+            // 修改 / 枯萎 操作
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _edit,
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('修改'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _delete,
+                    icon: const Icon(Icons.delete_outline,
+                        size: 18, color: Colors.red),
+                    label: const Text('枯萎', style: TextStyle(color: Colors.red)),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
           ],
         ),

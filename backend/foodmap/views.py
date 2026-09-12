@@ -1550,9 +1550,9 @@ APP_CONFIG_DEFAULTS = {
     'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
     'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
     # APP 内更新（version_code 为整数，发布新版时改这里/AppConfig 表覆盖）
-    'app_version_code': '5',
-    'app_version_name': '1.0.4',
-    'app_update_note': '修复：猫咪相册/美食记录上传照片失败——选图自动压缩后再上传，多张也能轻松传',
+    'app_version_code': '7',
+    'app_version_name': '1.1.1',
+    'app_update_note': '修复：种下的草可以修改和枯萎删除了——点进详情，底部有「修改」「枯萎」按钮',
     'app_apk_arm64': 'http://139.196.27.224/download/app-arm64-v8a-release.apk',
     'app_apk_armeabi': 'http://139.196.27.224/download/app-armeabi-v7a-release.apk',
     'app_apk_x86_64': 'http://139.196.27.224/download/app-x86_64-release.apk',
