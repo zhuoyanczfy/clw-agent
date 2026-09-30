@@ -144,10 +144,14 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---- 认识天数卡片 ----
+  // ---- 相恋天数卡片（主） + 相识天数（统计条） ----
   Widget _buildDaysCard() {
-    final meet = DateTime.tryParse(RemoteConfig.meetDate) ?? DateTime.now();
-    final days = DateTime.now().difference(meet).inDays + 1;
+    final now = DateTime.now();
+    final meet = DateTime.tryParse(RemoteConfig.meetDate);
+    final love = DateTime.tryParse(RemoteConfig.loveStartDate);
+    final meetDays = meet == null ? 0 : now.difference(meet).inDays + 1;
+    final loveDays = love == null ? 0 : now.difference(love).inDays + 1;
+    final confession = DateTime.tryParse(RemoteConfig.loveConfessionDate);
     return BouncyIn(
       offsetY: 20,
       child: Container(
@@ -165,7 +169,7 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '我们认识的第 $days 天',
+              love == null ? '我们认识的第 $meetDays 天' : '在一起第 $loveDays 天',
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -173,10 +177,18 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '从 ${RemoteConfig.meetDate} 认识你，每一天都值得纪念',
-              style: const TextStyle(fontSize: 13, color: Color(0xFFFFF7E0)),
-            ),
+            if (love != null)
+              Text(
+                '${love.year}年${love.month}月${love.day}日在一起，每一天都值得纪念',
+                style: const TextStyle(fontSize: 13, color: Color(0xFFFFF7E0)),
+              ),
+            if (confession != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${confession.month}月${confession.day}日补上的那次表白，也是我们的纪念日 ⭐',
+                style: const TextStyle(fontSize: 13, color: Color(0xFFFFF7E0)),
+              ),
+            ],
             if (_weather != null) ...[
               const SizedBox(height: 14),
               _buildWeatherBar(_weather!),
@@ -184,11 +196,13 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 16),
             Row(
               children: [
-                _daysItem(days, '相识天数'),
-                const SizedBox(width: 16),
-                _daysItem(days ~/ 7, '相识周数'),
-                const SizedBox(width: 16),
-                _daysItem(days ~/ 30, '相识月数'),
+                if (love != null) ...[
+                  _daysItem(loveDays, '相恋天数'),
+                  const SizedBox(width: 16),
+                  _daysItem(loveDays ~/ 7, '相恋周数'),
+                  const SizedBox(width: 16),
+                ],
+                _daysItem(meetDays, '相识天数'),
               ],
             ),
           ],

@@ -1528,6 +1528,9 @@ APP_CONFIG_DEFAULTS = {
     # 专属信息
     'her_name': '隶文',
     'meet_date': '2026-07-23',
+    # 相恋纪念日：在一起日期 + 补表白日期（首页相恋天数卡）
+    'love_start_date': '2026-09-19',
+    'love_confession_date': '2026-09-27',
     'greeting': '今天也要好好吃饭呀',
     'daily_dish_title': '今天想带你吃',
     # 通知文案（{herName} / {dishName} 会被替换）

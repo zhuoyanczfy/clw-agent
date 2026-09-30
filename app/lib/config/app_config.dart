@@ -12,6 +12,12 @@ class AppConfig {
   /// 你们认识的日期（格式 YYYY-MM-DD），用于计算认识天数
   static const String meetDate = '2026-07-23';
 
+  /// 在一起的日期（格式 YYYY-MM-DD），首页显示相恋天数
+  static const String loveStartDate = '2026-09-19';
+
+  /// 补表白的日子（格式 YYYY-MM-DD，留空则不显示那一行）
+  static const String loveConfessionDate = '2026-09-27';
+
   /// 首页专属欢迎语
   static const String greeting = '今天也要好好吃饭呀';
 

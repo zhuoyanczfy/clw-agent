@@ -43,6 +43,8 @@ class RemoteConfig {
   // 配置键（与 backend/foodmap/views.py 的 APP_CONFIG_DEFAULTS 对齐）
   static const kHerName = 'her_name';
   static const kMeetDate = 'meet_date';
+  static const kLoveStartDate = 'love_start_date';
+  static const kLoveConfessionDate = 'love_confession_date';
   static const kGreeting = 'greeting';
   static const kDailyDishTitle = 'daily_dish_title';
   static const kWaterTitle = 'water_title';
@@ -153,6 +155,10 @@ class RemoteConfig {
         return AppConfig.herName;
       case kMeetDate:
         return AppConfig.meetDate;
+      case kLoveStartDate:
+        return AppConfig.loveStartDate;
+      case kLoveConfessionDate:
+        return AppConfig.loveConfessionDate;
       case kGreeting:
         return AppConfig.greeting;
       case kDailyDishTitle:
@@ -201,6 +207,10 @@ class RemoteConfig {
 
   static String get herName => get(kHerName, fallback: AppConfig.herName);
   static String get meetDate => get(kMeetDate, fallback: AppConfig.meetDate);
+  static String get loveStartDate =>
+        get(kLoveStartDate, fallback: AppConfig.loveStartDate);
+  static String get loveConfessionDate =>
+        get(kLoveConfessionDate, fallback: AppConfig.loveConfessionDate);
   static String get greeting => get(kGreeting, fallback: AppConfig.greeting);
   static String get dailyDishTitle =>
       get(kDailyDishTitle, fallback: AppConfig.dailyDishTitle);
