@@ -1555,9 +1555,12 @@ APP_CONFIG_DEFAULTS = {
     'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
     'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
     # APP 内更新（version_code 为整数，发布新版时改这里/AppConfig 表覆盖）
-    'app_version_code': '9',
-    'app_version_name': '1.2.0',
-    'app_update_note': '两个人一起玩的小游戏来啦：每日一问、二选一、你画我猜 ⭐',
+    'app_version_code': '10',
+    'app_version_name': '1.2.1',
+    'app_update_note': (
+        'v1.2.1：首页新增「相恋天数」——在一起第 N 天，还有 9.27 补上的那次表白 ⭐\n'
+        'v1.2.0 回顾：双人小游戏上线——每日一问、二选一、你画我猜，可回看战绩'
+    ),
     'app_apk_arm64': 'http://139.196.27.224/download/app-arm64-v8a-release.apk',
     'app_apk_armeabi': 'http://139.196.27.224/download/app-armeabi-v7a-release.apk',
     'app_apk_x86_64': 'http://139.196.27.224/download/app-x86_64-release.apk',
