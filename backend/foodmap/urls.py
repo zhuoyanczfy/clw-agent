@@ -64,4 +64,11 @@ urlpatterns = [
     # 花坛（一日游园计划）
     path('api/plant-beds/', views.api_plant_beds, name='plant_beds'),
     path('api/plant-beds/<int:bed_id>/', views.api_plant_bed_detail, name='plant_bed_detail'),
+    # 双人小游戏（每日一问 / 二选一 / 你画我猜）
+    path('api/game/daily/', views.api_game_daily, name='game_daily'),
+    path('api/game/start/', views.api_game_start, name='game_start'),
+    path('api/game/move/', views.api_game_move, name='game_move'),
+    path('api/game/active/', views.api_game_active, name='game_active'),
+    path('api/game/history/', views.api_game_history, name='game_history'),
+    path('api/game/abandon/', views.api_game_abandon, name='game_abandon'),
 ]

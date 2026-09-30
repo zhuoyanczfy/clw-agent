@@ -1,4 +1,11 @@
+import json
+import re
+
 from django.contrib import admin
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.urls import path
+from django.utils import timezone
 
 from .models import (
     AppConfig,
@@ -11,6 +18,8 @@ from .models import (
     District,
     Divination,
     FavoriteDish,
+    GameQuestion,
+    GameSession,
     Pet,
     PetEvent,
     PetPhoto,
@@ -170,6 +179,172 @@ class AppConfigAdmin(admin.ModelAdmin):
     search_fields = ('key', 'description')
     ordering = ['id']
 
+    # ---------- 星语编辑器（可视化编辑碎碎念，不用手写 JSON） ----------
+
+    STAR_NOTES_KEY = 'secret_notes'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                'star-notes/',
+                self.admin_site.admin_view(self.star_notes_editor),
+                name='foodmap_appconfig_star_notes',
+            ),
+        ]
+        return custom + urls
+
+    @staticmethod
+    def _read_star_notes():
+        """与 api_config 相同的合并逻辑，保证编辑器里看到的就是实际生效的内容。"""
+        from .views import APP_CONFIG_DEFAULTS
+
+        config = dict(APP_CONFIG_DEFAULTS)
+        config.update(dict(AppConfig.objects.values_list('key', 'value')))
+        try:
+            data = json.loads(config.get(AppConfigAdmin.STAR_NOTES_KEY, '[]') or '[]')
+        except ValueError:
+            return []
+        return [n for n in data if isinstance(n, dict)] if isinstance(data, list) else []
+
+    def star_notes_editor(self, request):
+        """星语碎碎念可视化编辑器：GET 打开页面，POST 保存整份列表。"""
+        if request.method == 'POST':
+            return self._save_star_notes(request)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': '星语编辑器',
+            'opts': self.model._meta,
+            'editor_data': {
+                'notes': self._read_star_notes(),
+                'today': timezone.localdate().isoformat(),
+            },
+        }
+        return render(request, 'admin/foodmap/appconfig/star_notes_edit.html', context)
+
+    def _save_star_notes(self, request):
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': '提交的数据不是合法 JSON'}, status=400)
+
+        raw_notes = payload.get('notes') if isinstance(payload, dict) else None
+        if not isinstance(raw_notes, list):
+            return JsonResponse({'ok': False, 'error': '数据格式不对'}, status=400)
+
+        notes = []
+        seen = set()
+        for index, item in enumerate(raw_notes, start=1):
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get('text', '')).strip()
+            if not text:
+                continue
+            nid = str(item.get('id', '')).strip() or f'n{int(timezone.now().timestamp() * 1000)}{index}'
+            while nid in seen:
+                nid += 'x'
+            seen.add(nid)
+            date = str(item.get('date', '')).strip()
+            if date and not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+                date = ''
+            notes.append({'id': nid, 'text': text, 'date': date})
+
+        if not notes:
+            return JsonResponse({'ok': False, 'error': '至少要保留一条碎碎念'}, status=400)
+
+        AppConfig.objects.update_or_create(
+            key=self.STAR_NOTES_KEY,
+            defaults={
+                'value': json.dumps(notes, ensure_ascii=False),
+                'description': '星语碎碎念（建议用「星语编辑器」维护）',
+            },
+        )
+        return JsonResponse({'ok': True, 'count': len(notes)})
+
+    # ---------- 星语编辑器（可视化编辑碎碎念，不用手写 JSON） ----------
+
+    STAR_NOTES_KEY = 'secret_notes'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                'star-notes/',
+                self.admin_site.admin_view(self.star_notes_editor),
+                name='foodmap_appconfig_star_notes',
+            ),
+        ]
+        return custom + urls
+
+    @staticmethod
+    def _read_star_notes():
+        """与 api_config 相同的合并逻辑，保证编辑器里看到的就是实际生效的内容。"""
+        from .views import APP_CONFIG_DEFAULTS
+
+        config = dict(APP_CONFIG_DEFAULTS)
+        config.update(dict(AppConfig.objects.values_list('key', 'value')))
+        try:
+            data = json.loads(config.get(AppConfigAdmin.STAR_NOTES_KEY, '[]') or '[]')
+        except ValueError:
+            return []
+        return [n for n in data if isinstance(n, dict)] if isinstance(data, list) else []
+
+    def star_notes_editor(self, request):
+        """星语碎碎念可视化编辑器：GET 打开页面，POST 保存整份列表。"""
+        if request.method == 'POST':
+            return self._save_star_notes(request)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': '星语编辑器',
+            'opts': self.model._meta,
+            'editor_data': {
+                'notes': self._read_star_notes(),
+                'today': timezone.localdate().isoformat(),
+            },
+        }
+        return render(request, 'admin/foodmap/appconfig/star_notes_edit.html', context)
+
+    def _save_star_notes(self, request):
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': '提交的数据不是合法 JSON'}, status=400)
+
+        raw_notes = payload.get('notes') if isinstance(payload, dict) else None
+        if not isinstance(raw_notes, list):
+            return JsonResponse({'ok': False, 'error': '数据格式不对'}, status=400)
+
+        notes = []
+        seen = set()
+        for index, item in enumerate(raw_notes, start=1):
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get('text', '')).strip()
+            if not text:
+                continue
+            nid = str(item.get('id', '')).strip() or f'n{int(timezone.now().timestamp() * 1000)}{index}'
+            while nid in seen:
+                nid += 'x'
+            seen.add(nid)
+            date = str(item.get('date', '')).strip()
+            if date and not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+                date = ''
+            notes.append({'id': nid, 'text': text, 'date': date})
+
+        if not notes:
+            return JsonResponse({'ok': False, 'error': '至少要保留一条碎碎念'}, status=400)
+
+        AppConfig.objects.update_or_create(
+            key=self.STAR_NOTES_KEY,
+            defaults={
+                'value': json.dumps(notes, ensure_ascii=False),
+                'description': '星语碎碎念（建议用「星语编辑器」维护）',
+            },
+        )
+        return JsonResponse({'ok': True, 'count': len(notes)})
+
 
 @admin.register(SplashImage)
 class SplashImageAdmin(admin.ModelAdmin):
@@ -217,3 +392,30 @@ class DailyMealAdmin(admin.ModelAdmin):
     list_display = ('date', 'name', 'category', 'created_at')
     search_fields = ('name', 'description')
     date_hierarchy = 'date'
+
+
+@admin.register(GameQuestion)
+class GameQuestionAdmin(admin.ModelAdmin):
+    """双人小游戏题库：改完 APP 下次开局即生效；可用 seed_game_questions 命令导入内置题。"""
+
+    list_display = ('category', 'content_preview', 'option_a', 'option_b', 'enabled', 'sort')
+    list_filter = ('category', 'enabled')
+    list_editable = ('enabled', 'sort')
+    search_fields = ('content', 'option_a', 'option_b')
+
+    @admin.display(description='题目 / 题干')
+    def content_preview(self, obj):
+        text = obj.content or f'{obj.option_a} vs {obj.option_b}'
+        return text[:40] + '…' if len(text) > 40 else text
+
+
+@admin.register(GameSession)
+class GameSessionAdmin(admin.ModelAdmin):
+    """双人小游戏会话：只读排查用（双盲答案/笔画等状态看原始 JSON）。"""
+
+    list_display = ('id', 'game_type', 'status', 'date', 'created_at', 'updated_at')
+    list_filter = ('game_type', 'status')
+    readonly_fields = ('game_type', 'date', 'state', 'status', 'created_at', 'updated_at')
+
+    def has_add_permission(self, request):
+        return False

@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'dish_page.dart';
 import 'divination_page.dart';
+import 'games_page.dart';
 import 'meal_history_page.dart';
 import 'pet_page.dart';
 import 'quote_page.dart';
@@ -77,6 +78,8 @@ class _HomePageState extends State<HomePage> {
                 _buildDivinationCard(),
                 const SizedBox(height: 20),
                 _buildQuoteCard(),
+                const SizedBox(height: 20),
+                _buildGamesCard(),
                 const SizedBox(height: 20),
                 _buildTodayDishCard(),
                 const SizedBox(height: 20),
@@ -457,6 +460,72 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const QuotePage()));
+  }
+
+  void _openGames() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const GamesPage()));
+  }
+
+  // ---- 游戏时光入口卡片（双人小游戏） ----
+  Widget _buildGamesCard() {
+    return BouncyIn(
+      offsetY: 20,
+      delay: const Duration(milliseconds: 275),
+      child: Card(
+        child: SquishyTap(
+          onTap: _openGames,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppTheme.primary, AppTheme.primaryDark],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Text('🎮', style: TextStyle(fontSize: 22)),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '游戏时光',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '每日一问 · 二选一 · 你画我猜，两个人一起玩',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppTheme.textLight),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ---- 好句好段入口卡片 ----

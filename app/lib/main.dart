@@ -10,6 +10,7 @@ import 'pages/settings_page.dart';
 import 'pages/splash_page.dart';
 import 'services/app_updater.dart';
 import 'services/notification_service.dart';
+import 'services/player_role.dart';
 import 'services/quote_push_service.dart';
 import 'services/remote_config.dart';
 import 'services/update_installer.dart';
@@ -92,6 +93,12 @@ class _RootState extends State<_Root> {
 
   /// 启动时拉取云端配置并按配置调度全部提醒（容错，失败用本地默认值）
   Future<void> _bootstrap() async {
+    // 本机角色（her/him）：双人小游戏用，先于一切网络请求加载
+    try {
+      await PlayerRole.load();
+    } catch (_) {
+      // 角色加载失败用默认值（APP=her / Web=him）
+    }
     try {
       await RemoteConfig.load();
     } catch (_) {

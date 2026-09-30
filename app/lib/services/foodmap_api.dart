@@ -14,8 +14,10 @@ import '../models/restaurant.dart';
 import '../models/splash_image.dart';
 import '../models/wishlist_item.dart';
 import '../models/bucket_item.dart';
+import '../models/game.dart';
 import '../models/plant_bed.dart';
 import 'api_config.dart';
+import 'player_role.dart';
 
 /// 后端 API 异常（网络失败 / 非 2xx）。
 class ApiException implements Exception {
@@ -65,7 +67,11 @@ class FoodmapApi {
   }) async {
     final base = await _base();
     if (base.isEmpty) throw const ApiException('还未配置后端地址，请到设置页填写');
-    final headers = <String, String>{'X-Api-Token': AppConfig.apiToken};
+    final headers = <String, String>{
+      'X-Api-Token': AppConfig.apiToken,
+      // 双人小游戏按角色区分双方（其余接口忽略此头，完全向后兼容）
+      'X-Api-Role': PlayerRole.current,
+    };
     http.Response resp;
     switch (method) {
       case 'GET':
@@ -108,7 +114,10 @@ class FoodmapApi {
       final resp = await http
           .get(
             _uri(base, '/api/health/'),
-            headers: {'X-Api-Token': AppConfig.apiToken},
+            headers: {
+              'X-Api-Token': AppConfig.apiToken,
+              'X-Api-Role': PlayerRole.current,
+            },
           )
           .timeout(const Duration(seconds: 5));
       return resp.statusCode == 200;
@@ -713,4 +722,60 @@ class FoodmapApi {
       client.close();
     }
   }
+
+  // ---------- 双人小游戏 ----------
+
+  /// 今日一问：当天首次访问后端自动建会话，返回双盲视图。
+  static Future<GameSession> fetchDailyGame() async {
+    final json = await _getJson('/api/game/daily/') as Map<String, dynamic>;
+    return GameSession.fromJson(json['game'] as Map<String, dynamic>);
+  }
+
+  /// 开始一局（this_or_that / draw_guess）：同类型旧会话自动作废。
+  static Future<GameSession> startGame(String gameType) async {
+    final json = await _postJson('/api/game/start/', {'game_type': gameType})
+        as Map<String, dynamic>;
+    return GameSession.fromJson(json['game'] as Map<String, dynamic>);
+  }
+
+  /// 走子：统一入口（answer/choose/pick_word/strokes/ready/guess）。
+  static Future<GameSession> gameMove(
+    int sessionId,
+    String action, {
+    dynamic value,
+  }) async {
+    final json = await _postJson('/api/game/move/', {
+      'session_id': sessionId,
+      'action': action,
+      'value': value,
+    }) as Map<String, dynamic>;
+    return GameSession.fromJson(json['game'] as Map<String, dynamic>);
+  }
+
+  /// 进行中的会话列表（含每日一问当天会话）。
+  static Future<List<GameSession>> fetchActiveGames() async {
+    final json = await _getJson('/api/game/active/') as Map<String, dynamic>;
+    return (json['games'] as List)
+        .map((e) => GameSession.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// 已完成会话（倒序，offset/limit 分页，返回列表与总数）。
+  static Future<({List<GameSession> games, int total})> fetchGameHistory({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final json = await _getJson(
+        '/api/game/history/?limit=$limit&offset=$offset') as Map<String, dynamic>;
+    return (
+      games: (json['games'] as List)
+          .map((e) => GameSession.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      total: (json['total'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// 放弃一局。
+  static Future<void> abandonGame(int sessionId) =>
+      _postJson('/api/game/abandon/', {'session_id': sessionId});
 }

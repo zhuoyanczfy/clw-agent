@@ -1,10 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../services/api_config.dart';
 import '../services/foodmap_api.dart';
+import '../services/player_role.dart';
 import '../theme.dart';
 import '../widgets/cute_widgets.dart';
 import 'reminder_settings_page.dart';
+import 'secret_notes_page.dart';
 
 /// 设置页：后端服务地址 + 每日关怀提醒入口。
 /// 提醒的开关/时间/文案可在 APP 内配置（本地优先生效，可恢复后台默认）。
@@ -21,11 +26,14 @@ class _SettingsPageState extends State<SettingsPage> {
   String _savedServerUrl = '';
   bool _testing = false;
   String? _testResult;
+  // 版本号（底部页脚展示）
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadServerUrl();
+    _loadVersion();
   }
 
   @override
@@ -73,6 +81,20 @@ class _SettingsPageState extends State<SettingsPage> {
       _testing = false;
       _testResult = ok ? '✅ 连接成功，后端服务正常' : '❌ 无法连接，请检查地址与网络';
     });
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() => _appVersion = info.version);
+    } catch (_) {}
+  }
+
+  void _openSecretNotes() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SecretNotesPage()),
+    );
   }
 
   @override
@@ -214,9 +236,122 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
+
+              // ---- 双人游戏身份（每日一问 / 二选一 / 你画我猜按此落答案） ----
+              _sectionHeader('🎮', '这台设备是谁的', '双人游戏按此区分双方'),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Android APP 默认是「她」，网页版默认是「他」；换设备玩时在这里切换',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textLight,
+                            height: 1.6),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildRoleChoice(
+                                role: PlayerRole.her,
+                                title: '她',
+                                icon: Icons.female),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildRoleChoice(
+                                role: PlayerRole.him,
+                                title: '他',
+                                icon: Icons.male),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 44),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _appVersion.isEmpty ? '光旅之盘' : '光旅之盘 v$_appVersion',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textLight.withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _EasterEggStar(onOpen: _openSecretNotes),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ---- 身份选择按钮（♀她 / ♂他，选中态高亮） ----
+  Widget _buildRoleChoice({
+    required String role,
+    required String title,
+    required IconData icon,
+  }) {
+    final selected = PlayerRole.current == role;
+    return SquishyTap(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => _switchRole(role, title),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFF3D6) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? AppTheme.primary : const Color(0x14000000),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: selected ? AppTheme.primary : AppTheme.textLight,
+              size: 26,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                color: selected ? AppTheme.primaryDark : AppTheme.textDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _switchRole(String role, String title) async {
+    if (PlayerRole.current == role) return;
+    await PlayerRole.set(role);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('这台设备将以「$title」的身份参与双人游戏'),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -240,6 +375,69 @@ class _SettingsPageState extends State<SettingsPage> {
           style: const TextStyle(fontSize: 12, color: AppTheme.textLight),
         ),
       ],
+    );
+  }
+}
+
+/// 设置页彩蛋入口：伪装成版本号旁的装饰小星，点击闪一下再进入星语页。
+/// 刻意保持无 tooltip、无按钮涟漪——看起来只是一枚装饰符号。
+class _EasterEggStar extends StatefulWidget {
+  const _EasterEggStar({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  State<_EasterEggStar> createState() => _EasterEggStarState();
+}
+
+class _EasterEggStarState extends State<_EasterEggStar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+  );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _tap() {
+    if (_ctrl.isAnimating) return;
+    _ctrl.forward(from: 0); // 星星闪一下，与页面转场并行
+    widget.onOpen();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _tap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          final glow = math.sin(_ctrl.value * math.pi); // 0 → 1 → 0
+          return Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(
+              Icons.star_rounded,
+              size: 13 + glow * 4,
+              color: Color.lerp(
+                AppTheme.textLight.withValues(alpha: 0.6),
+                AppTheme.primary,
+                glow,
+              ),
+              shadows: [
+                Shadow(
+                  color: AppTheme.primary.withValues(alpha: 0.9 * glow),
+                  blurRadius: 12 * glow,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -3,6 +3,10 @@
 
 Token 配置在 backend/config/config.ini 默认节的 API_TOKEN，APP 内置在
 app/lib/config/app_config.dart 的 apiToken，两端保持一致即可。
+
+双人小游戏需要区分「她（her）」与「送礼人（him）」两个角色：客户端在请求头
+X-Api-Role 携带角色（her/him），鉴权通过后挂到 request.role；
+不带该头的老客户端默认 her，完全向后兼容。
 """
 import configparser
 import functools
@@ -33,10 +37,17 @@ def _extract_token(request):
     return ''
 
 
+def _extract_role(request):
+    """从请求头 X-Api-Role 提取角色（her=她 / him=送礼人），非法值归一为 her。"""
+    role = (request.headers.get('X-Api-Role', '') or '').strip().lower()
+    return role if role in ('her', 'him') else 'her'
+
+
 def require_api_token(view_func):
     """API Token 鉴权装饰器：校验请求头中的 Token 与 config.ini 配置是否一致。
 
     未配置 API_TOKEN 时返回 503，提示先配置；配置后所有 /api/ 接口必须带 Token。
+    鉴权通过后把双人角色挂到 request.role（见 _extract_role）。
     """
     @functools.wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -49,5 +60,6 @@ def require_api_token(view_func):
         provided = _extract_token(request)
         if not provided or not hmac.compare_digest(provided, expected):
             return JsonResponse({'error': '未授权：无效或缺失 API Token'}, status=401)
+        request.role = _extract_role(request)
         return view_func(request, *args, **kwargs)
     return wrapper

@@ -33,6 +33,8 @@ from .models import (
     District,
     Divination,
     FavoriteDish,
+    GameQuestion,
+    GameSession,
     Pet,
     PetEvent,
     PetPhoto,
@@ -1550,12 +1552,34 @@ APP_CONFIG_DEFAULTS = {
     'weather_rain_body': '今天{dayWeather}，出门记得带伞 ⭐',
     'weather_cold_body': '今天降温到 {dayTemp}°，记得多穿一点 ⭐',
     # APP 内更新（version_code 为整数，发布新版时改这里/AppConfig 表覆盖）
-    'app_version_code': '7',
-    'app_version_name': '1.1.1',
-    'app_update_note': '修复：种下的草可以修改和枯萎删除了——点进详情，底部有「修改」「枯萎」按钮',
+    'app_version_code': '9',
+    'app_version_name': '1.2.0',
+    'app_update_note': '两个人一起玩的小游戏来啦：每日一问、二选一、你画我猜 ⭐',
     'app_apk_arm64': 'http://139.196.27.224/download/app-arm64-v8a-release.apk',
     'app_apk_armeabi': 'http://139.196.27.224/download/app-armeabi-v7a-release.apk',
     'app_apk_x86_64': 'http://139.196.27.224/download/app-x86_64-release.apk',
+    # 彩蛋「星语」：设置页小星星点开的碎碎念（JSON 数组字符串）
+    # 条目格式 {"id": "...", "text": "...", "date": "YYYY-MM-DD"}；Admin「APP配置」可用同键覆盖
+    'secret_notes': json.dumps(
+        [
+            {
+                'id': 'seed-1',
+                'text': '被你找到啦。这里是只属于我们的一片小星空——以后想对你说的话，我都会藏在这儿的星星里。',
+                'date': '2026-09-16',
+            },
+            {
+                'id': 'seed-2',
+                'text': '以后不用等天晴了，这里的星星，每天都会为你亮着。',
+                'date': '2026-09-16',
+            },
+            {
+                'id': 'seed-3',
+                'text': '今天路过一家小店，橱窗里的小东西特别像你。下次带你去看，好不好？',
+                'date': '2026-09-16',
+            },
+        ],
+        ensure_ascii=False,
+    ),
 }
 
 
@@ -2040,3 +2064,410 @@ def api_meal_random(request):
         if meal_pool.pool_size() <= 1 or candidate['name'] != today_name:
             break
     return JsonResponse({'meal': _meal_json(item)})
+
+
+# ============ 双人小游戏（每日一问 / 二选一 / 你画我猜） ============
+
+# 题库为空时的兑底题（seed_game_questions 导入后基本不会命中）
+_DAILY_FALLBACK_QUESTIONS = [
+    '今天有什么开心的小事，想第一个告诉 TA？',
+    '如果明天可以一起去吃一家店，你会选哪家？',
+    '最近有没有一首歌，听起来就会想到对方？',
+]
+_THIS_OR_THAT_FALLBACK = [('火锅 ⭐', '烧烤'), ('奶茶', '咖啡'), ('米饭', '面条')]
+_DRAW_WORDS_FALLBACK = ['番茄牛腩', '糖醋排骨', '麻婆豆腐', '红烧肉', '蛋炒饭', '小笼包']
+
+_DRAW_MAX_STROKES = 60      # 最多笔画数
+_DRAW_MAX_POINTS = 200      # 单笔最多点数（后端截断，前端同时抽稀）
+_DRAW_MAX_ATTEMPTS = 3      # 猜词次数
+
+
+def _game_role(request):
+    """当前请求角色（her / him）：鉴权装饰器挂在 request.role，防御性取默认。"""
+    return 'him' if getattr(request, 'role', 'her') == 'him' else 'her'
+
+
+def _partner(role):
+    return 'him' if role == 'her' else 'her'
+
+
+def _pick_daily_question(day):
+    """按日期哈希轮换取每日一问（与每日菜单 md5 轮换同思路，独立题库）。"""
+    pool = list(GameQuestion.objects.filter(category='daily_question', enabled=True))
+    if not pool:
+        return random.choice(_DAILY_FALLBACK_QUESTIONS)
+    seed = int(hashlib.md5(day.isoformat().encode()).hexdigest(), 16)
+    return pool[seed % len(pool)].content
+
+
+def _pick_this_or_that():
+    """随机抽一道二选一题，题面快照进会话（题库后续修改不影响已建会话）。"""
+    q = (
+        GameQuestion.objects.filter(category='this_or_that', enabled=True)
+        .order_by('?')
+        .first()
+    )
+    if q:
+        return {'prompt': q.content, 'option_a': q.option_a, 'option_b': q.option_b}
+    a, b = random.choice(_THIS_OR_THAT_FALLBACK)
+    return {'prompt': '', 'option_a': a, 'option_b': b}
+
+
+def _pick_draw_words():
+    """从菜库抽 3 个候选词（画者三选一）；菜库不足时用兑底词补齐。"""
+    names = list(Dish.objects.filter(enabled=True).values_list('name', flat=True))
+    names = [n for n in names if n]
+    if len(names) < 3:
+        for w in _DRAW_WORDS_FALLBACK:
+            if w not in names:
+                names.append(w)
+    random.shuffle(names)
+    return names[:3]
+
+
+_DRAW_STROKE_DEFAULT_COLOR = 0xFF37474F  # 墨色
+_DRAW_STROKE_MIN_W, _DRAW_STROKE_MAX_W = 0.002, 0.06  # 线宽系数范围
+
+
+def _clean_strokes(raw):
+    """笔画清洗：每笔 {c 颜色, w 线宽系数, p 点列}，坐标归一 0~1（3 位小数），限笔数/点数。"""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for stroke in raw[:_DRAW_MAX_STROKES]:
+        if not isinstance(stroke, dict):
+            continue
+        pts_raw = stroke.get('p')
+        if not isinstance(pts_raw, list) or not pts_raw:
+            continue
+        pts = []
+        for p in pts_raw[:_DRAW_MAX_POINTS]:
+            if not isinstance(p, dict):
+                continue
+            try:
+                x = min(max(float(p.get('x', 0)), 0.0), 1.0)
+                y = min(max(float(p.get('y', 0)), 0.0), 1.0)
+            except (TypeError, ValueError):
+                continue
+            pts.append({'x': round(x, 3), 'y': round(y, 3)})
+        if not pts:
+            continue
+        try:
+            c = int(stroke.get('c', _DRAW_STROKE_DEFAULT_COLOR))
+        except (TypeError, ValueError):
+            c = _DRAW_STROKE_DEFAULT_COLOR
+        try:
+            w = min(max(float(stroke.get('w', 0.012)), _DRAW_STROKE_MIN_W), _DRAW_STROKE_MAX_W)
+        except (TypeError, ValueError):
+            w = 0.012
+        out.append({'c': c, 'w': round(w, 3), 'p': pts})
+    return out
+
+
+def _norm_word(s):
+    """猜词归一化：去空白、转小写，用于宽松比对。"""
+    return re.sub(r'\s+', '', s or '').lower()
+
+
+def _word_match(guess, word):
+    """猜词判定（游戏从宽）：完全相等，或任一方包含另一方（≥2 字）即算中。"""
+    g, w = _norm_word(guess), _norm_word(word)
+    if not g or not w:
+        return False
+    if g == w:
+        return True
+    return (len(g) >= 2 and g in w) or (len(w) >= 2 and w in g)
+
+
+def _game_json(s, role):
+    """会话序列化（双盲铁律）：completed 前隐藏对方答案；猜者在揭晓前不见 word。"""
+    state = dict(s.state or {})
+    answers = dict(state.get('answers') or {})
+    reveal = s.status == 'completed'
+    both_answered = bool(answers.get('her')) and bool(answers.get('him'))
+    show_partner = reveal or both_answered
+    data = {
+        'id': s.pk,
+        'game_type': s.game_type,
+        'status': s.status,
+        'my_role': role,
+        'date': s.date.isoformat() if s.date else None,
+        'created_at': s.created_at.isoformat(),
+        'updated_at': s.updated_at.isoformat(),
+    }
+    if s.game_type == 'daily_question':
+        data.update({
+            'question': state.get('question', ''),
+            'my_answer': answers.get(role),
+            'partner_answer': answers.get(_partner(role)) if show_partner else None,
+            'partner_answered': bool(answers.get(_partner(role))),
+        })
+    elif s.game_type == 'this_or_that':
+        data.update({
+            'prompt': state.get('prompt', ''),
+            'option_a': state.get('option_a', ''),
+            'option_b': state.get('option_b', ''),
+            'my_choice': answers.get(role),
+            'partner_choice': answers.get(_partner(role)) if show_partner else None,
+            'partner_answered': bool(answers.get(_partner(role))),
+            'same': show_partner
+                and bool(answers.get('her'))
+                and answers.get('her') == answers.get('him'),
+        })
+    elif s.game_type == 'draw_guess':
+        drawer = state.get('drawer') or 'her'
+        word = state.get('word')
+        i_am_drawer = role == drawer
+        data.update({
+            'drawer': drawer,
+            'am_i_drawer': i_am_drawer,
+            # 候选词仅画者未选词时可见；正确词仅画者与揭晓后可见
+            'words': state.get('words') if (i_am_drawer and not word) else None,
+            'word': word if (reveal or i_am_drawer) else None,
+            'strokes': state.get('strokes') or [],
+            'ready': bool(state.get('ready')),
+            'attempts': state.get('attempts', 0),
+            'max_attempts': _DRAW_MAX_ATTEMPTS,
+            'guesses': state.get('guesses') or [],
+            'pending_judge': bool(state.get('pending_judge')),
+            'judged': bool(state.get('judged')),
+            'correct': state.get('correct') if reveal else None,
+        })
+    return data
+
+
+def _game_body(request):
+    """解析请求体 JSON，失败统一 400。"""
+    try:
+        return json.loads(request.body or b'{}')
+    except ValueError:
+        return None
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET'])
+def api_game_daily(request):
+    """今日一问：无会话时自动创建（题目按日期轮换），返回双盲视图。"""
+    role = _game_role(request)
+    today = timezone.localdate()
+    session = GameSession.objects.filter(game_type='daily_question', date=today).first()
+    if session is None:
+        try:
+            session = GameSession.objects.create(
+                game_type='daily_question',
+                date=today,
+                status='active',
+                state={'question': _pick_daily_question(today), 'answers': {}},
+            )
+        except IntegrityError:
+            session = GameSession.objects.get(game_type='daily_question', date=today)
+    return JsonResponse({'game': _game_json(session, role)})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_game_start(request):
+    """开始一局（this_or_that / draw_guess）：同类型旧会话自动作废。"""
+    role = _game_role(request)
+    data = _game_body(request)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    game_type = (data.get('game_type') or '').strip()
+    if game_type not in ('this_or_that', 'draw_guess'):
+        return JsonResponse({'error': '仅支持 this_or_that / draw_guess（每日一问走 /api/game/daily/）'}, status=400)
+
+    GameSession.objects.filter(
+        game_type=game_type, status__in=['waiting', 'active']
+    ).update(status='abandoned')
+
+    if game_type == 'this_or_that':
+        state = {**_pick_this_or_that(), 'answers': {}}
+    else:
+        state = {
+            'words': _pick_draw_words(),
+            'word': None,
+            'drawer': role,
+            'strokes': [],
+            'ready': False,
+            'guesses': [],
+            'attempts': 0,
+            'correct': None,
+        }
+    session = GameSession.objects.create(game_type=game_type, status='active', state=state)
+    return JsonResponse({'game': _game_json(session, role)}, status=201)
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_game_move(request):
+    """统一走子：{session_id, action, value}，按游戏类型分发。
+
+    action：answer（每日一问）/ choose（二选一）/ pick_word、strokes、ready（画者）/ guess（猜者）
+    """
+    role = _game_role(request)
+    data = _game_body(request)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    session_id = data.get('session_id')
+    action = (data.get('action') or '').strip()
+    value = data.get('value')
+    if not isinstance(session_id, int) or not action:
+        return JsonResponse({'error': '缺少 session_id 或 action'}, status=400)
+
+    session = GameSession.objects.filter(pk=session_id).first()
+    if session is None:
+        return JsonResponse({'error': '会话不存在'}, status=404)
+    if session.status != 'active':
+        return JsonResponse({'error': '这一局已经结束了哦'}, status=400)
+
+    state = dict(session.state or {})
+    err = None
+
+    if session.game_type == 'daily_question':
+        if action != 'answer':
+            err = '每日一问只支持 answer'
+        else:
+            answer = str(value or '').strip()[:500]
+            if not answer:
+                err = '答案不能为空'
+            else:
+                answers = dict(state.get('answers') or {})
+                answers[role] = answer
+                state['answers'] = answers
+                if answers.get('her') and answers.get('him'):
+                    session.status = 'completed'
+
+    elif session.game_type == 'this_or_that':
+        if action != 'choose':
+            err = '二选一只支持 choose'
+        elif value not in ('a', 'b'):
+            err = 'choice 只能是 a 或 b'
+        else:
+            answers = dict(state.get('answers') or {})
+            answers[role] = value
+            state['answers'] = answers
+            if answers.get('her') and answers.get('him'):
+                session.status = 'completed'
+
+    elif session.game_type == 'draw_guess':
+        drawer = state.get('drawer') or 'her'
+        i_am_drawer = role == drawer
+        if action == 'pick_word':
+            if not i_am_drawer:
+                err = '只有画的人能选词'
+            elif state.get('word'):
+                err = '已经选过词啦'
+            else:
+                word = str(value or '').strip()
+                if word not in (state.get('words') or []):
+                    err = '只能从候选词里选'
+                else:
+                    state['word'] = word
+        elif action == 'strokes':
+            if not i_am_drawer:
+                err = '只有画的人能动笔'
+            elif state.get('ready'):
+                err = '已经交卷，不能再改啦'
+            else:
+                state['strokes'] = _clean_strokes(value)
+        elif action == 'ready':
+            if not i_am_drawer:
+                err = '只有画的人能交卷'
+            elif not state.get('word'):
+                err = '先选一个词再交卷'
+            else:
+                state['ready'] = True
+        elif action == 'guess':
+            if i_am_drawer:
+                err = '画的人不能自己猜'
+            elif not state.get('ready'):
+                err = 'TA 还没画完，稍等一下'
+            elif state.get('pending_judge'):
+                err = '三次机会已用完，等 TA 判定吧'
+            else:
+                guess = str(value or '').strip()[:50]
+                if not guess:
+                    err = '猜词不能为空'
+                else:
+                    guesses = list(state.get('guesses') or []) + [guess]
+                    state['guesses'] = guesses
+                    state['attempts'] = len(guesses)
+                    correct = _word_match(guess, state.get('word') or '')
+                    state['correct'] = correct
+                    if correct:
+                        session.status = 'completed'
+                    elif len(guesses) >= _DRAW_MAX_ATTEMPTS:
+                        # 三次未中不直接判负：交画者仲裁（生僻词/叫法不同时兜底）
+                        state['pending_judge'] = True
+        elif action == 'judge':
+            if not i_am_drawer:
+                err = '由画的人来判定'
+            elif not state.get('pending_judge'):
+                err = '现在不需要判定'
+            else:
+                ok = value in (True, 'true', 1, '1')
+                state['pending_judge'] = False
+                state['judged'] = True
+                state['correct'] = bool(state.get('correct')) or ok
+                session.status = 'completed'
+        else:
+            err = '不支持的 action'
+
+    if err:
+        return JsonResponse({'error': err}, status=400)
+
+    session.state = state
+    session.save()
+    return JsonResponse({'game': _game_json(session, role)})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET'])
+def api_game_active(request):
+    """进行中的会话列表（含每日一问当天会话），双盲视图。"""
+    role = _game_role(request)
+    sessions = GameSession.objects.filter(status__in=['waiting', 'active'])[:6]
+    return JsonResponse({'games': [_game_json(s, role) for s in sessions]})
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['GET'])
+def api_game_history(request):
+    """已完成会话（倒序，offset/limit 分页），双方答案均已揭晓。"""
+    role = _game_role(request)
+    try:
+        limit = min(max(int(request.GET.get('limit', 20)), 1), 50)
+        offset = max(int(request.GET.get('offset', 0)), 0)
+    except ValueError:
+        limit, offset = 20, 0
+    qs = GameSession.objects.filter(status='completed')
+    total = qs.count()
+    sessions = qs[offset:offset + limit]
+    return JsonResponse({
+        'games': [_game_json(s, role) for s in sessions],
+        'total': total,
+    })
+
+
+@require_api_token
+@csrf_exempt
+@require_http_methods(['POST'])
+def api_game_abandon(request):
+    """放弃一局：置 abandoned（双人游戏任一方可放弃）。"""
+    data = _game_body(request)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': '请求体不是合法 JSON'}, status=400)
+    session_id = data.get('session_id')
+    if not isinstance(session_id, int):
+        return JsonResponse({'error': '缺少 session_id'}, status=400)
+    updated = GameSession.objects.filter(
+        pk=session_id, status__in=['waiting', 'active']
+    ).update(status='abandoned')
+    if not updated:
+        return JsonResponse({'error': '会话不存在或已结束'}, status=404)
+    return JsonResponse({'ok': True})

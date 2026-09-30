@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import '../data/secret_notes_fallback.dart';
+import '../models/secret_note.dart';
 import 'foodmap_api.dart';
 
 /// 简单的时间描述（避免依赖 intl 的 TimeOfDay 序列化）
@@ -67,6 +69,8 @@ class RemoteConfig {
   static const kAppApkArm64 = 'app_apk_arm64';
   static const kAppApkArmeabi = 'app_apk_armeabi';
   static const kAppApkX86_64 = 'app_apk_x86_64';
+  // 彩蛋「星语」（与 backend/foodmap/views.py 的 APP_CONFIG_DEFAULTS 对齐）
+  static const kSecretNotes = 'secret_notes';
 
   static Map<String, String> _values = const {};
   static bool _loaded = false;
@@ -239,6 +243,28 @@ class RemoteConfig {
       get(kWeatherRainBody, fallback: '今天{dayWeather}，出门记得带伞 ⭐');
   static String get weatherColdBody =>
       get(kWeatherColdBody, fallback: '今天降温到 {dayTemp}°，记得多穿一点 ⭐');
+
+  // ---------- 彩蛋「星语」 ----------
+
+  /// 星语碎碎念列表（后台配置 secret_notes，JSON 数组字符串）；
+  /// 未配置或解析失败时回退内置兜底，离线也能进彩蛋。
+  static List<SecretNote> get secretNotes {
+    final raw = get(kSecretNotes);
+    if (raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List<dynamic>;
+        final notes = <SecretNote>[];
+        for (final item in list) {
+          if (item is Map) {
+            final n = SecretNote.fromJson(item.cast<String, dynamic>());
+            if (n.text.isNotEmpty) notes.add(n);
+          }
+        }
+        if (notes.isNotEmpty) return notes;
+      } catch (_) {}
+    }
+    return kSecretNotesFallback;
+  }
 
   // ---------- APP 内更新配置 ----------
 

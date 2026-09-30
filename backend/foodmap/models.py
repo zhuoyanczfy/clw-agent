@@ -195,7 +195,7 @@ class AppConfig(models.Model):
     """APP 云端配置：键值对，Admin 修改后 APP 启动自动拉取生效（无需重打包）。"""
 
     key = models.CharField('配置键', max_length=50, unique=True)
-    value = models.CharField('配置值', max_length=1000, blank=True, default='')
+    value = models.TextField('配置值', blank=True, default='')
     description = models.CharField('说明', max_length=200, blank=True, default='')
 
     class Meta:
@@ -495,3 +495,78 @@ class ChatSession(models.Model):
 
     def __str__(self):
         return f'{self.title or "会话"} #{self.pk}'
+
+
+class GameQuestion(models.Model):
+    """双人小游戏题库：每日一问（daily_question）与二选一（this_or_that）。
+
+    每日一问只填 content；二选一 content 为题干（可空），加 option_a / option_b。
+    你画我猜的词不进此表，直接从 Dish 菜库抽词。
+    Admin 可维护，可用 management 命令 seed_game_questions 导入内置题。
+    """
+
+    CATEGORY_CHOICES = [
+        ('daily_question', '每日一问'),
+        ('this_or_that', '二选一'),
+    ]
+
+    category = models.CharField('题型', max_length=20, choices=CATEGORY_CHOICES, db_index=True)
+    content = models.TextField('题目 / 题干', blank=True)
+    option_a = models.CharField('选项 A', max_length=100, blank=True)
+    option_b = models.CharField('选项 B', max_length=100, blank=True)
+    enabled = models.BooleanField('启用', default=True)
+    sort = models.IntegerField('排序', default=0)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '游戏题库'
+        verbose_name_plural = '游戏题库'
+        ordering = ['sort', 'id']
+
+    def __str__(self):
+        return f'{self.get_category_display()}：{self.content or self.option_a}'
+
+
+class GameSession(models.Model):
+    """双人小游戏会话：单表多游戏（state 存各游戏自定义 JSON，参考 PairSpace）。
+
+    state 结构：
+    - daily_question: {question, answers: {her, him}}（文本回答）
+    - this_or_that:   {prompt, option_a, option_b, answers: {her, him}}（a/b）
+    - draw_guess:     {words, word, drawer, strokes, ready, guesses, attempts, correct}
+      strokes 为归一化坐标(0~1)的笔画数组；猜者最多 3 次，三次不中揭晓答案。
+
+    双盲铁律：双方都答完（status=completed）前，序列化时隐藏对方答案；
+    你画我猜在揭晓前不向猜者泄露 word（画者自己选的词当然可见）。
+    """
+
+    GAME_CHOICES = [
+        ('daily_question', '每日一问'),
+        ('this_or_that', '二选一'),
+        ('draw_guess', '你画我猜'),
+    ]
+    STATUS_CHOICES = [
+        ('waiting', '等待开始'),
+        ('active', '进行中'),
+        ('completed', '已完成'),
+        ('abandoned', '已放弃'),
+    ]
+
+    game_type = models.CharField('游戏', max_length=20, choices=GAME_CHOICES, db_index=True)
+    date = models.DateField(
+        '所属日期', null=True, blank=True, db_index=True,
+        help_text='每日一问按天自动建会话；其他游戏为空',
+    )
+    state = models.JSONField('状态', default=dict)
+    status = models.CharField('状态', max_length=12, choices=STATUS_CHOICES, default='active')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '游戏会话'
+        verbose_name_plural = '游戏会话'
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['game_type', 'status'])]
+
+    def __str__(self):
+        return f'{self.get_game_type_display()} #{self.pk}（{self.get_status_display()}）'

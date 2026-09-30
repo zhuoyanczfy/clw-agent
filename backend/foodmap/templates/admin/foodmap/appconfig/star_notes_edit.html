@@ -1,0 +1,258 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">首页</a>
+  &rsaquo; <a href="{% url 'admin:foodmap_appconfig_changelist' %}">APP 配置</a>
+  &rsaquo; 星语编辑器
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  #sn-wrap { max-width: 780px; }
+  .sn-tip {
+    padding: 12px 14px;
+    border: 1px solid var(--hairline-color, #ddd);
+    border-radius: 8px;
+    background: var(--darkened-bg, #f8f8f8);
+    color: var(--body-fg, #333);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .sn-toolbar { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+  .sn-btn {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--hairline-color, #ddd);
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .sn-primary {
+    background: var(--default-button-bg, #417690);
+    border-color: var(--default-button-bg, #417690);
+    color: var(--button-fg, #fff);
+    font-weight: 600;
+  }
+  .sn-primary:disabled { opacity: .6; cursor: wait; }
+  .sn-status { font-size: 13px; }
+  .sn-ok { color: #23a55a; }
+  .sn-err { color: #d33; }
+  .sn-card {
+    border: 1px solid var(--hairline-color, #ddd);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: var(--body-bg, #fff);
+  }
+  .sn-fresh { border-color: var(--link-fg, #417690); box-shadow: 0 0 0 2px rgba(65, 118, 144, .12); }
+  .sn-card textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 54px;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--hairline-color, #ddd);
+    border-radius: 6px;
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .sn-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .sn-row input[type=date] {
+    padding: 5px 8px;
+    border: 1px solid var(--hairline-color, #ddd);
+    border-radius: 6px;
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+  }
+  .sn-spacer { flex: 1; }
+  .sn-id { font-size: 12px; color: var(--body-quiet-color, #888); }
+  .sn-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--hairline-color, #ddd);
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .sn-icon:hover:not(:disabled) { border-color: var(--link-fg, #417690); color: var(--link-fg, #417690); }
+  .sn-icon:disabled { opacity: .35; cursor: default; }
+  .sn-danger:hover:not(:disabled) { border-color: #d33; color: #d33; }
+  .sn-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--body-quiet-color, #888);
+    border: 1px dashed var(--hairline-color, #ddd);
+    border-radius: 8px;
+  }
+</style>
+
+<div id="sn-wrap">
+  <p class="sn-tip">
+    这里写下的每一条都会变成「星语」页里的一颗星，保存后她刷新页面就能看到。<br>
+    · 只改文字不动 id：她那边保持安静，不会重新提醒；<br>
+    · 点「✦」重做为新星会换一个 id：她下次打开会看到一颗新的星星在闪，提醒她去看。
+  </p>
+
+  <div class="sn-toolbar">
+    <button type="button" id="sn-add" class="sn-btn">＋ 添加一条</button>
+    <button type="button" id="sn-save" class="sn-btn sn-primary">保存</button>
+    <span id="sn-status" class="sn-status"></span>
+  </div>
+
+  <div id="sn-list"></div>
+</div>
+
+<div hidden id="sn-csrf">{% csrf_token %}</div>
+{{ editor_data|json_script:"sn-data" }}
+
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('sn-data').textContent);
+  const today = data.today;
+  let notes = (data.notes || []).map(function (n) {
+    return { id: n.id || '', text: n.text || '', date: n.date || '', fresh: false };
+  });
+
+  const list = document.getElementById('sn-list');
+  const status = document.getElementById('sn-status');
+  const csrfToken = document.querySelector('#sn-csrf input').value;
+
+  function flash(msg, ok) {
+    status.textContent = msg;
+    status.className = 'sn-status ' + (ok ? 'sn-ok' : 'sn-err');
+    if (ok) {
+      setTimeout(function () {
+        if (status.textContent === msg) status.textContent = '';
+      }, 4000);
+    }
+  }
+
+  function newId() {
+    return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function iconBtn(label, title, onClick, disabled, danger) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sn-icon' + (danger ? ' sn-danger' : '');
+    b.textContent = label;
+    b.title = title;
+    b.disabled = !!disabled;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function spacer() {
+    const s = document.createElement('span');
+    s.className = 'sn-spacer';
+    return s;
+  }
+
+  function render() {
+    list.innerHTML = '';
+    if (!notes.length) {
+      const empty = document.createElement('div');
+      empty.className = 'sn-empty';
+      empty.textContent = '还没有碎碎念，点「添加一条」写第一句吧。';
+      list.appendChild(empty);
+      return;
+    }
+    notes.forEach(function (n, i) {
+      const card = document.createElement('div');
+      card.className = 'sn-card' + (n.fresh ? ' sn-fresh' : '');
+
+      const ta = document.createElement('textarea');
+      ta.rows = 2;
+      ta.placeholder = '想对她说的话…';
+      ta.value = n.text;
+      ta.addEventListener('input', function () { n.text = ta.value; });
+      card.appendChild(ta);
+
+      const row = document.createElement('div');
+      row.className = 'sn-row';
+
+      const date = document.createElement('input');
+      date.type = 'date';
+      date.value = n.date;
+      date.addEventListener('change', function () { n.date = date.value; });
+      row.appendChild(date);
+      row.appendChild(spacer());
+
+      const idTag = document.createElement('span');
+      idTag.className = 'sn-id';
+      idTag.textContent = n.fresh ? '新星' : (n.id ? 'id ' + n.id : '新条目');
+      row.appendChild(idTag);
+
+      row.appendChild(iconBtn('↑', '上移', function () {
+        if (i > 0) { const t = notes[i - 1]; notes[i - 1] = notes[i]; notes[i] = t; render(); }
+      }, i === 0));
+
+      row.appendChild(iconBtn('↓', '下移', function () {
+        if (i < notes.length - 1) { const t = notes[i + 1]; notes[i + 1] = notes[i]; notes[i] = t; render(); }
+      }, i === notes.length - 1));
+
+      row.appendChild(iconBtn('✦', '重做为新星（她会重新看到闪烁）', function () {
+        n.id = newId();
+        n.fresh = true;
+        render();
+        flash('已标记为新星，保存后她那边会重新闪烁提醒', true);
+      }));
+
+      row.appendChild(iconBtn('✕', '删除这一条', function () {
+        if (confirm('确定删除这一条吗？')) { notes.splice(i, 1); render(); }
+      }, false, true));
+
+      card.appendChild(row);
+      list.appendChild(card);
+    });
+  }
+
+  document.getElementById('sn-add').addEventListener('click', function () {
+    notes.push({ id: newId(), text: '', date: today, fresh: true });
+    render();
+    const last = list.querySelector('.sn-card:last-child textarea');
+    if (last) last.focus();
+  });
+
+  document.getElementById('sn-save').addEventListener('click', async function () {
+    const clean = notes
+      .map(function (n) { return { id: n.id, text: n.text.trim(), date: n.date }; })
+      .filter(function (n) { return n.text; });
+    if (!clean.length) { flash('至少要留一条碎碎念', false); return; }
+
+    const btn = document.getElementById('sn-save');
+    btn.disabled = true;
+    try {
+      const resp = await fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ notes: clean }),
+      });
+      const result = await resp.json();
+      if (result.ok) {
+        notes = clean.map(function (n) {
+          return { id: n.id, text: n.text, date: n.date, fresh: false };
+        });
+        render();
+        flash('已保存 ' + result.count + ' 条，她刷新星语页就能看到', true);
+      } else {
+        flash('保存失败：' + (result.error || '未知错误'), false);
+      }
+    } catch (e) {
+      flash('保存失败：' + e, false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  render();
+})();
+</script>
+{% endblock %}
